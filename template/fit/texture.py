@@ -237,8 +237,10 @@ if __name__ == "__main__":
         print(name, f"{time.time()-t:.0f}s", {k: (np.round(v).tolist() if isinstance(v, list) else v) for k, v in meta.items() if k != "texture"})
 
 
-def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024):
-    """Texture from the AI turnaround views: each texel takes the view that faces it best."""
+def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024, face_photo_res: dict | None = None):
+    """Texture from the AI turnaround views: each texel takes the view that faces it best.
+    face_photo_res (the single-photo body fit): take the face from the ORIGINAL photo instead of the
+    AI front (likeness; keeps glasses/accessories that were in the photo)."""
     from .multiview import _rotz
     views = json.load(open(work / "views.json"))
     lcs = params["local_changes"]
@@ -286,6 +288,22 @@ def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024):
         vd.append(dict(name=name, rgba=rgba, P=P, depth=Vr[:, 1], zbuf=zbuf, inner=inner,
                        skin=(cat == 2) | (cat == 3), facing=-(n_world @ R.T)[:, 1], H=H, W=W))
 
+    head_face = np.isin(np.array([L[b] for b in dom])[F[:, 0]], ("head", "eye.L", "eye.R"))
+    if face_photo_res is not None:  # original photo as an extra, head-only, preferred view
+        model0, V0, P0, _, _, det0 = posed_mesh(work, params, face_photo_res)
+        P0 = align_head(model0, V0, P0, det0)
+        rgba0 = cv2.cvtColor(cv2.imread(str(work / "cutout.png"), cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+        H0, W0 = rgba0.shape[:2]
+        Vimg0 = np.stack([P0[:, 0], V0[:, 1], -P0[:, 1]], 1)
+        _, tid0, _ = rasterize(Vimg0, F, np.zeros((len(F), 3)), center=(W0 / 2, 0, -H0 / 2), scale=1.0, size=W0)
+        zb0 = np.full((H0, W0), np.inf, np.float32)
+        zb0[tid0 >= 0] = V0[F][:, :, 1].mean(1)[tid0[tid0 >= 0]]
+        n0 = np.cross(V0[F[:, 1]] - V0[F[:, 0]], V0[F[:, 2]] - V0[F[:, 0]])
+        n0 /= np.linalg.norm(n0, axis=1, keepdims=True) + 1e-12
+        cat0 = preprocess.person_categories(np.ascontiguousarray(rgba0[..., :3]))
+        vd.append(dict(name="photo", rgba=rgba0, P=P0, depth=V0[:, 1], zbuf=zb0,
+                       inner=cv2.erode((rgba0[..., 3] > 200).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0,
+                       skin=(cat0 == 2) | (cat0 == 3), facing=-n0[:, 1], H=H0, W=W0, head_only=True))
     tex = np.zeros((size, size, 3), np.float32)
     best = np.full((size, size), -1.0, np.float32)
     hand_tex = np.zeros((size, size), bool)
@@ -312,6 +330,10 @@ def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024):
             hand_tex[ty_, tx_] = True
         for v in vd:
             score = v["facing"][i]
+            if v.get("head_only"):
+                if not head_face[i] or score < 0.35:
+                    continue
+                score += 1.0  # the real photo wins wherever it sees the face
             if score < 0.25:
                 continue
             p = w @ v["P"][F[i]]
@@ -344,6 +366,7 @@ def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024):
     det0 = json.load(open(work / "detections.json"))
     _, hair, iris = region_colors(rgba0, det0, preprocess.person_categories(np.ascontiguousarray(rgba0[..., :3])))
     meta = {"texture": str(out), "ai_backview": False, "ai_turnaround": True, "skin": skin.tolist(),
+            "face_from": "photo" if face_photo_res is not None else "ai",
             "hair": None if hair is None else hair.tolist(), "iris": None if iris is None else iris.tolist(),
             "coverage": float(valid.mean())}
     json.dump(meta, open(work / "texture.json", "w"), indent=1)

@@ -38,6 +38,8 @@ def main():
     ap.add_argument("--glasses-color", default="20,20,22", help="frame colour R,G,B")
     ap.add_argument("--ai-turnaround", action="store_true",
                     help="OPTIONAL: FLUX.2-klein-4B front/side/back T-pose sheet → 3-view body fit + texture (first use downloads ~15 GB)")
+    ap.add_argument("--face-texture", choices=["photo", "ai"], default="photo",
+                    help="with --ai-turnaround: face texture from the original photo (likeness, default) or the AI front (no glasses)")
     ap.add_argument("--reuse-ai", action="store_true",
                     help="reuse an existing AI turnaround sheet for this image instead of generating a new one")
     ap.add_argument("--ai-backview", action="store_true",
@@ -106,7 +108,8 @@ def main():
     if back.exists():
         back.unlink()
     if views:
-        tmeta = texture.bake_multiview(work, params, {"multiview": res["multiview"], "pose_rotvec": res["mv_pose_rotvec"]})
+        tmeta = texture.bake_multiview(work, params, {"multiview": res["multiview"], "pose_rotvec": res["mv_pose_rotvec"]},
+                                       face_photo_res=res if args.face_texture == "photo" else None)
     if args.ai_backview and not views:
         from fit import backview
         try:
@@ -115,7 +118,7 @@ def main():
             log(f"    AI back view failed ({e}); falling back to geometric fill")
     if not views:
         tmeta = texture.bake(work, params, res)
-    log(f"    from {'AI 3 views' if tmeta.get('ai_turnaround') else 'photo'}{' + AI back view' if tmeta.get('ai_backview') else ''}: {tmeta['coverage']:.0%} of the UV atlas; rest inpainted")
+    log(f"    from {'AI 3 views (face: ' + tmeta.get('face_from', 'ai') + ')' if tmeta.get('ai_turnaround') else 'photo'}{' + AI back view' if tmeta.get('ai_backview') else ''}: {tmeta['coverage']:.0%} of the UV atlas; rest inpainted")
 
     log("    hair / eyebrows / eyelashes (MakeHuman CC0 proxies)")
     from fit import hair as hairmod

@@ -4,6 +4,7 @@
         ../build/anny_tpose.npz ../build/template
 """
 import json
+import os
 import sys
 
 import bpy
@@ -79,6 +80,28 @@ def make_material(name, rgba):
     return m
 
 
+def to_mtoon(mat, rgba=None, image=None, mask=False, double_sided=False):
+    """VRM-native MToon: photo textures already contain lighting, so keep shading gentle
+    (light shade colour, strong GI equalisation) instead of PBR darkening the photo."""
+    mt = mat.vrm_addon_extension.mtoon1
+    mt.enabled = True
+    pbr = mt.pbr_metallic_roughness
+    if rgba is not None:
+        pbr.base_color_factor = rgba
+    ext_ = mt.extensions.vrmc_materials_mtoon
+    if image is not None:
+        pbr.base_color_texture.index.source = image
+        ext_.shade_multiply_texture.index.source = image
+    ext_.shade_color_factor = (0.86, 0.84, 0.84)
+    ext_.shading_toony_factor = 0.6
+    ext_.shading_shift_factor = -0.15
+    ext_.gi_equalization_factor = 0.9
+    if mask:
+        mt.alpha_mode = "MASK"
+        mt.alpha_cutoff = 0.5
+    mt.double_sided = double_sided
+
+
 def build():
     clear_scene()
     verts, faces = d["verts"], d["faces"]
@@ -137,6 +160,18 @@ def build():
             nt.links.new(gt.outputs[0], bsdf.inputs["Alpha"])
             m.use_backface_culling = False
         mats[pm["name"]] = m
+    # MToon for everything (after the node setup above, which MToon reads/rebuilds)
+    skin_img = bpy.data.images.get(os.path.basename(TEX["texture"])) if TEX else None
+    for name, m in mats.items():
+        base = tuple(m.diffuse_color)
+        if name == "Skin":
+            to_mtoon(m, (1, 1, 1, 1) if skin_img else base, skin_img)
+        elif any(pm["name"] == name for pm in pmats):
+            pm = next(pm for pm in pmats if pm["name"] == name)
+            img = bpy.data.images.get(os.path.basename(pm["texture"])) if pm.get("texture") else None
+            to_mtoon(m, (1, 1, 1, 1) if img else base, img, mask=img is not None, double_sided=True)
+        else:
+            to_mtoon(m, base)
     for m in mats.values():
         me.materials.append(m)
     order = list(mats)

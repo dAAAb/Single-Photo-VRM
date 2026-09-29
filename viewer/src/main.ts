@@ -208,6 +208,7 @@ async function photoToVRM(file: File) {
       hair: document.querySelector<HTMLSelectElement>('#gen-hair')!.value,
       glasses: document.querySelector<HTMLSelectElement>('#gen-glasses')!.value,
       shoes: document.querySelector<HTMLSelectElement>('#gen-shoes')!.value,
+      face_texture: document.querySelector<HTMLSelectElement>('#gen-face')!.value,
       glasses_color: document.querySelector<HTMLInputElement>('#gen-glasses-color')!.value.slice(1),
     });
     res = await fetch(`/api/photo2vrm?${q}`, {

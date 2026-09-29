@@ -80,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
             extra += ["--hair", q.get("hair", ["auto"])[0]]
         if q.get("shoes", ["auto"])[0] in ("auto", "none", "shoes01", "shoes02", "shoes03", "shoes04", "shoes05", "shoes06"):
             extra += ["--shoes", q.get("shoes", ["auto"])[0]]
+        if q.get("face_texture", ["photo"])[0] in ("photo", "ai"):
+            extra += ["--face-texture", q.get("face_texture", ["photo"])[0]]
         if q.get("glasses", ["off"])[0] in ("off", "round", "square"):
             extra += ["--glasses", q.get("glasses", ["off"])[0]]
         gc = q.get("glasses_color", [""])[0]

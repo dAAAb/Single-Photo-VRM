@@ -63,6 +63,9 @@
           <input type="color" id="gen-glasses-color" value="#141416" />
         </label>
         <label class="row"><input type="checkbox" id="gen-ai-back" /> AI 三視圖：更準的體型與完整貼圖（FLUX.2-klein-4B；首次下載約 15 GB）</label>
+        <label class="row">臉部貼圖
+          <select id="gen-face"><option value="photo">原始照片（較像本人）</option><option value="ai">AI 正面（去除眼鏡）</option></select>
+        </label>
         <p class="note">正面照看不到後腦，綁起來的頭髮（如馬尾）請手動選髮型。</p>
       </details>
       <div id="gen-status" class="note"></div>
