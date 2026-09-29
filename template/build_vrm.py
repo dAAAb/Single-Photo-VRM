@@ -12,6 +12,7 @@ from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 NPZ, OUT = argv[0], argv[1]
+TEX = json.load(open(argv[2])) if len(argv) > 2 else None  # optional texture.json from fit/texture.py
 d = np.load(NPZ)
 ARKIT = [str(x) for x in d["arkit"]]
 LABELS = [str(x) for x in d["labels"]]
@@ -101,7 +102,19 @@ def build():
     teeth_mask = d["teeth"] if "teeth" in d else np.zeros(len(verts), bool)
     mats = {k: make_material(k, c) for k, c in {
         "Skin": (0.86, 0.68, 0.58, 1), "Mouth": (0.72, 0.36, 0.38, 1), "Teeth": (0.93, 0.91, 0.86, 1),
-        "Sclera": (0.95, 0.95, 0.93, 1), "Iris": (0.33, 0.22, 0.13, 1), "Pupil": (0.02, 0.02, 0.02, 1)}.items()}
+        "Sclera": (0.78, 0.76, 0.74, 1), "Iris": (0.33, 0.22, 0.13, 1), "Pupil": (0.02, 0.02, 0.02, 1)}.items()}
+    if TEX:
+        skin = mats["Skin"]
+        nt = skin.node_tree
+        img = bpy.data.images.load(TEX["texture"])
+        img.pack()
+        node = nt.nodes.new("ShaderNodeTexImage")
+        node.image = img
+        nt.links.new(node.outputs["Color"], nt.nodes["Principled BSDF"].inputs["Base Color"])
+        if TEX.get("iris"):
+            r, g, b = (c / 255 for c in TEX["iris"])
+            mats["Iris"].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (r, g, b, 1)
+            mats["Iris"].diffuse_color = (r, g, b, 1)
     for m in mats.values():
         me.materials.append(m)
     order = list(mats)
@@ -127,7 +140,7 @@ def build():
             v = verts[f].mean(0) - c
             v /= np.linalg.norm(v) + 1e-9
             ang = np.degrees(np.arccos(np.clip(-v[1], -1, 1)))  # angle from forward (-Y)
-            p.material_index = order.index("Pupil" if ang < 10 else "Iris" if ang < 24 else "Sclera")
+            p.material_index = order.index("Pupil" if ang < 13 else "Iris" if ang < 31 else "Sclera")  # human-like iris size
 
     # --- shape keys (lowerCamel ARKit names; Warudo reads these directly)
     ob.shape_key_add(name="Basis")

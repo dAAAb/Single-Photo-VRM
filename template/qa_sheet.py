@@ -16,17 +16,18 @@ for blend in sorted((ROOT / "build" / "out").glob("*.blend")):
                    capture_output=True)
     fit = ROOT / "build" / "fit" / name
     tiles = []
-    for p in (fit / "cutout.png", fit / "body_fit.png", prev.with_name(f"{name}_prev_front.png"), prev.with_name(f"{name}_prev_side.png")):
+    for p in (fit / "cutout.png", fit / "body_fit.png", prev.with_name(f"{name}_prev_front.png"),
+              prev.with_name(f"{name}_prev_back.png"), prev.with_name(f"{name}_prev_side.png")):
         im = Image.open(p).convert("RGBA").resize((H, H))
         bg = Image.new("RGBA", (H, H), (235, 235, 238, 255))
         bg.alpha_composite(im)
         tiles.append(bg.convert("RGB"))
-    row = Image.new("RGB", (H * 4, H), "white")
+    row = Image.new("RGB", (H * 5, H), "white")
     for i, t in enumerate(tiles):
         row.paste(t, (i * H, 0))
     ImageDraw.Draw(row).text((6, 6), name, fill=(0, 0, 0))
     rows.append(row)
-sheet = Image.new("RGB", (H * 4, H * len(rows)), "white")
+sheet = Image.new("RGB", (H * 5, H * len(rows)), "white")
 for i, r in enumerate(rows):
     sheet.paste(r, (0, i * H))
 out = ROOT / "build" / "qa_sheet.png"

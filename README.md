@@ -23,7 +23,7 @@ template/.venv/bin/python template/photo2vrm.py photo.png   # CLI → build/out/
 template/.venv/bin/python template/server.py        # 或：啟動本機 API，再到 Test Bench「生成」頁籤拖入照片
 ```
 
-任何人形照片（T-pose 或任意姿勢、真人或卡通）→ 去背置中 → 身形 + 臉型擬合 → T-pose Perfect Sync VRM。Mac CPU 約 35–60 秒，不需 CUDA。
+任何人形照片（T-pose 或任意姿勢、真人或卡通）→ 去背置中 → 身形 + 臉型擬合 → 貼圖 → T-pose Perfect Sync VRM。加 `--ai-backview` 可用 FLUX.2-klein-4B 生成背面（選用，首次下載約 15 GB）。Mac CPU 約 35–60 秒，不需 CUDA。
 
 ## 知識庫
 
@@ -38,4 +38,4 @@ template/.venv/bin/python template/server.py        # 或：啟動本機 API，�
 - ✅ Phase 0b：範本 VRM（Anny：身體 + ARKit 52 臉 + 舌頭 + 牙齒）
 - ✅ Phase 1：Perfect Sync 實機驗收（webcam / iPhone + VSeeFace）
 - ✅ Phase 2：照片 → 身形 + 臉型擬合（Python 原型，拖放介面）
-- 🚧 Phase 3：貼圖
+- ✅ Phase 3：貼圖（照片投影；選用 AI 背面 FLUX.2-klein-4B）

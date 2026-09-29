@@ -26,14 +26,17 @@ OUTPUTS = {  # name → path template ({id})
     "vrm0": "build/out/{id}.vrm0.vrm", "vrm1": "build/out/{id}.vrm1.vrm",
     "cutout": "build/fit/{id}/cutout.png", "detections": "build/fit/{id}/detections.png",
     "body_fit": "build/fit/{id}/body_fit.png", "face_fit": "build/fit/{id}/face_fit.png",
+    "texture": "build/fit/{id}/texture.png", "back": "build/fit/{id}/back_cutout.png",
 }
 
 
-def run_job(job_id: str, image: Path, gender: str | None):
+def run_job(job_id: str, image: Path, gender: str | None, ai_backview: bool = False):
     job = jobs[job_id]
     with run_lock:
         job["status"] = "running"
         cmd = [sys.executable, str(HERE / "photo2vrm.py"), str(image)] + (["--gender", gender] if gender else [])
+        if ai_backview:
+            cmd.append("--ai-backview")
         p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in p.stdout:
             if line.startswith("[photo2vrm]") or "Error" in line or "failed" in line:
@@ -64,12 +67,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "unsupported image type"}, 415)
         gender = parse_qs(u.query).get("gender", [None])[0]
         gender = gender if gender in ("female", "male") else None
+        ai_backview = parse_qs(u.query).get("ai_backview", ["0"])[0] == "1"
         job_id = uuid.uuid4().hex[:12]
         UPLOADS.mkdir(parents=True, exist_ok=True)
         img = UPLOADS / f"{job_id}{ext}"
         img.write_bytes(self.rfile.read(n))
         jobs[job_id] = {"status": "queued", "log": [], "outputs": []}
-        threading.Thread(target=run_job, args=(job_id, img, gender), daemon=True).start()
+        threading.Thread(target=run_job, args=(job_id, img, gender, ai_backview), daemon=True).start()
         self._json({"id": job_id})
 
     def do_GET(self):

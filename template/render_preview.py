@@ -23,9 +23,10 @@ cam.data.type = "ORTHO"
 cam.data.ortho_scale = size
 scn.render.engine = "BLENDER_WORKBENCH"
 scn.display.shading.light = "STUDIO"
-scn.display.shading.color_type = "MATERIAL"
+scn.display.shading.color_type = "TEXTURE"  # image texture where present, material colour otherwise
 scn.render.resolution_x = scn.render.resolution_y = 700
-for name, loc, rot in (("front", (c.x, c.y - 5, c.z), (90, 0, 0)), ("side", (c.x + 5, c.y, c.z), (90, 0, 90))):
+for name, loc, rot in (("front", (c.x, c.y - 5, c.z), (90, 0, 0)), ("side", (c.x + 5, c.y, c.z), (90, 0, 90)),
+                       ("back", (c.x, c.y + 5, c.z), (90, 0, 180))):
     cam.location = loc
     cam.rotation_euler = tuple(math.radians(a) for a in rot)
     scn.render.filepath = out.replace(".png", f"_{name}.png")

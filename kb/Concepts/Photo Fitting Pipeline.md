@@ -16,6 +16,7 @@ tags:
 | 2 偵測 | 同上 | Pose Landmarker heavy（21 點 → Anny COCO 標籤）；Face Landmarker 在放大的頭部裁切上跑（478 點 + blendshape） |
 | 3 身體 | `fit/body.py` | Anny（6 phenotype + 23 身形 local change）+ 17 骨 local-ref 姿勢 + 正交相機；損失 = GMoF 關鍵點 + 輪廓在內（背景距離場）+ 輪廓覆蓋（chamfer）；Adam 兩階段約 15 秒 |
 | 4 臉 | `fit/face.py`、`fit/face_corr.py` | 見下 |
+| 4.5 貼圖 | `fit/texture.py`（+ 選用 `fit/backview.py`） | UV texel → 照片姿勢網格 → 投影取色；可見 / 同部位正面延伸 / 後腦髮色 / inpaint；頭部 478 點 affine 對齊；選用 FLUX.2-klein-4B 背面 |
 | 5 匯出 | `export_anny.py --params` | 同一組參數 → T-pose；風格化骨頭縮放在 T-pose 空間烘焙（頂點 / 骨頭 / 52 表情差值都一起變換） |
 | 6 VRM | `build_vrm.py`（Blender headless） | 同 [[VRM Test Bench]] 驗證過的範本流程 |
 
@@ -34,6 +35,7 @@ tags:
 ## 踩坑
 - **MediaPipe 1.0.1（macOS wheel）**：偵測器初始化 Metal 直接 abort（`Service is unavailable`），指定 CPU delegate 也一樣 → 用 **0.10.35**
 - **MediaPipe 0.10.35**：float 遮罩 `numpy_view()` abort（`1 == ChannelSize()`）→ 只用 uint8 category mask
+- 2026-09-29 下午量到的 ~100 KB/s 是暫時的網路狀況（晚上 HF 14.7 MB/s）→ 大型下載前先實測，不要憑單次測量下結論
 - 網路慢時 `rembg`（numba / llvmlite）+ BiRefNet 太重 → Python 版不用；Web 版再用 BiRefNet（transformers.js）
 - 性別從單張輪廓判斷不可靠（多起點比較還會選錯）→ 使用者提示 / 之後 VLM
 - GMoF 覆蓋損失的 σ 太小時，遠處的輪廓（卡通大頭）梯度為零 → 風格化模式用由粗到細的 σ

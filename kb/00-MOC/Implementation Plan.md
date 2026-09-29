@@ -120,7 +120,18 @@ tags:
 - [ ] [[GLB Patching]]：改寫 POSITION / NORMAL / min-max，morph delta 保持不動，VRM 擴充欄位逐 byte 保留
 - [ ] 用同一個人的多張照片評估穩定度
 
-### Phase 3 — 貼圖（下一步：像不像主要靠這個）
+### Phase 3 — 貼圖 ✅ 幾何投影版（+ 選用 AI 背面）
+
+`fit/texture.py`：每個 UV texel 反推到「照片姿勢」的網格 → 投影回照片取色。
+- [x] 看得到 → 照片顏色；頭部用 478 點做 2D affine 對齊
+- [x] 背向、但視線落在同一個身體部位（軀幹背面 → 軀幹正面）→ 正面顏色延伸到背面
+- [x] 後腦 → 髮色（MediaPipe hair 類別中位數），沒有頭髮就用膚色
+- [x] 其他（被別的部位擋住、輪廓外）→ UV 空間 Telea inpaint
+- [x] 虹膜顏色取自 MediaPipe iris 點；鞏膜改偏灰、虹膜放大（之前看起來像瞪眼）
+- [x] **選用 AI 背面**：`--ai-backview` / 生成頁籤勾選 → mflux + FLUX.2-klein-4B（Apache-2.0，未 gated）生成背面 → 背向 texel 優先採用；首次會安裝 `.venv-mflux` 並下載約 15 GB。失敗會自動退回幾何版
+- [x] 回歸：9 張全部產出帶貼圖的 VRM；glTF validator 0 錯誤
+- [ ] AI 背面尚未實測（等使用者決定是否下載 15 GB）
+- 已知限制：背面會看到正面的圖案（領口、口袋）；大動作（坐 / 蹲）時被遮住的部位貼圖會糊；手臂貼在身體前面時會帶到衣服顏色；寬鬆長袍無法表現；照片臉很小時臉部貼圖解析度低
 - [ ] 臉：照片投影到 ICT UV（在 WebGPU 上 render-to-texture），左右對稱補齊，LaMa ONNX 補洞（Apache，208 MB，放在 Worker 裡跑）
 - [ ] 身體：用 MediaPipe 分割結果取膚色、衣服顏色；衣服先做成貼在身體上的貼圖
 - [ ] 頭髮 → 見 Phase 5
