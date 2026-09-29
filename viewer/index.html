@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VRM Test Bench</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="drop-hint">
+      <div class="big">把 .vrm 拖進來</div>
+      <div>動作：.vrma 或 Mixamo .fbx（拖進來後可指定到 待機 / 走 / 跑 / 跳）</div>
+      <button id="open-btn">或選擇檔案…</button>
+      <button id="sample-btn" hidden>載入範例模型</button>
+    </div>
+    <div id="hud">
+      <b>WASD</b> 移動 · <b>Shift</b> 跑 · <b>空白鍵</b> 跳 · 滑鼠拖曳 轉鏡頭 · 滾輪 縮放
+      <span id="state"></span>
+    </div>
+    <div id="toast"></div>
+  </div>
+  <aside id="panel">
+    <header>
+      <h1>VRM Test Bench</h1>
+      <div id="model-name">尚未載入</div>
+    </header>
+    <nav id="tabs">
+      <button data-tab="check" class="on">檢查</button>
+      <button data-tab="motion">動作</button>
+      <button data-tab="expr">表情</button>
+      <button data-tab="sync">Perfect Sync</button>
+      <button data-tab="cam">Webcam</button>
+    </nav>
+    <section data-pane="check" class="on">
+      <table id="checks"></table>
+      <h3>Meta</h3>
+      <table id="meta"></table>
+    </section>
+    <section data-pane="motion">
+      <p class="note">沒有指定動畫的狀態會用內建的程序式動作。</p>
+      <div id="slots"></div>
+      <h3>已載入的動作</h3>
+      <div id="clips"><p class="note">拖進 .vrma 或 Mixamo .fbx</p></div>
+      <label class="row"><input type="checkbox" id="lookat-mouse" checked /> 視線跟隨鏡頭</label>
+      <label class="row"><input type="checkbox" id="spring" checked /> 物理（spring bone）</label>
+      <button id="reset-pos">角色回到原點</button>
+      <button id="shot">截圖</button>
+    </section>
+    <section data-pane="expr">
+      <div class="bar"><button class="zero">全部歸零</button></div>
+      <div id="expr-sliders"></div>
+    </section>
+    <section data-pane="sync">
+      <p class="note">
+        <span class="dot ok"></span>VSeeFace（VRM0 PascalCase clip）
+        <span class="dot ok2"></span>Warudo（lowerCamel mesh morph）
+        <span class="dot miss"></span>缺
+      </p>
+      <div class="bar"><button class="zero">全部歸零</button></div>
+      <div id="sync-sliders"></div>
+    </section>
+    <section data-pane="cam">
+      <p class="note">用 MediaPipe 追蹤你的臉，即時驅動 52 個 ARKit 表情和頭部轉動，全部在瀏覽器內處理。沒有 Perfect Sync 的模型會改用 VRM 標準表情近似。</p>
+      <button id="cam-toggle">開啟 Webcam</button>
+      <label class="row"><input type="checkbox" id="cam-mirror" checked /> 鏡像（左右對調）</label>
+      <label class="row"><input type="checkbox" id="cam-head" checked /> 驅動頭部轉動</label>
+      <div id="cam-preview"></div>
+      <div id="cam-values"></div>
+    </section>
+  </aside>
+  <input type="file" id="file" accept=".vrm,.vrma,.fbx,.glb" multiple hidden />
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

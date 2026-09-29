@@ -49,16 +49,25 @@ tags:
 
 ## 開發階段
 
-### Phase 0 — 範本 VRM（Mac，Blender，一次性）
+### Phase 0a — VRM 測試頁（[[VRM Test Bench]]）✅ 先做
+瀏覽器測試台，**所有後續階段都用它驗收**，也能測任何現有 VRM：
+- [x] 拖放 `.vrm`（0.x / 1.0）；顯示 meta
+- [x] 相容性檢查：15 根必要骨、手指、選配骨、VRM preset、ARKit 52（分別檢查 VSeeFace 的 PascalCase clip 和 Warudo 的 lowerCamel mesh morph）、lookAt、spring bone、firstPerson
+- [x] **WASD 移動 / Shift 跑 / 空白鍵 跳**，第三人稱鏡頭；內建程序式 待機 / 走 / 跑 / 跳（不需動畫檔）
+- [x] 拖放 `.vrma` 或 Mixamo `.fbx` → 播放，或指定到 待機 / 走 / 跑 / 跳 取代內建動作
+- [x] VRM 表情滑桿、Perfect Sync 52 滑桿（缺的標紅）
+- [x] Webcam：MediaPipe 追蹤臉 → 即時驅動 52 表情 + 頭部轉動（沒 Perfect Sync 的模型用 preset 近似）
+- [x] 視線跟隨、spring bone 開關、截圖
+
+### Phase 0b — 範本 VRM（Mac，Blender，一次性）
 - [ ] 裝 Anny（`naver/anny`），匯出中性身體 + rig（104 骨 anny rig → 對 VRM humanoid）
 - [ ] ICT-FaceKit 頭：51 shape 改名（合併 L/R）+ 手雕 `tongueOut` → ARKit 52
 - [ ] **Spike：** 比較 Anny / MPFB 自帶的 Face Units（CC0，傳聞有 54 個 ARKit shape，未驗證）和 ICT。如果 Anny 的臉夠用，就不必接頭，但臉型擬合的自由度會比較低
 - [ ] 頭身接合 + 頸部權重 → 用 [[VRM Add-on for Blender]] 匯出 `template.vrm`（VRM0 + VRM1）
-- [ ] [[vrm-validator]] 通過
+- [ ] [[vrm-validator]] 通過；在 [[VRM Test Bench]] 全部檢查為綠燈
 
-### Phase 1 — Web 檢視器 + Perfect Sync 驗收（瀏覽器）
-- [ ] Vite + three.js + [[three-vrm]] 檢視器
-- [ ] **webcam → MediaPipe Face Landmarker blendshapes → 即時驅動範本的 52 個 morph**（不用 iPhone 就能驗收 Perfect Sync）
+### Phase 1 — Perfect Sync 驗收
+- [ ] 在 [[VRM Test Bench]] 用 webcam 驅動範本 VRM 的 52 個 morph
 - [ ] 實機驗收：iPhone iFacialMocap → VSeeFace（VRM0）/ Warudo
 
 **完成標準**：範本 VRM 在瀏覽器 webcam 和 VSeeFace + iPhone 兩邊都能正確驅動嘴形、眨眼、眼球、舌頭。
