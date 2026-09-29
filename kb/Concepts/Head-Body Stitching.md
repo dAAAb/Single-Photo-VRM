@@ -17,3 +17,6 @@ tags:
 5. UV 空間 color transfer / Poisson 融膚色
 
 ECON 的換臉技巧可參考但非商用。
+
+> [!tip] v2：變成一次性工作
+> 在 [[Template Morphing]] 架構下，頭（[[ICT-FaceKit]]）和身體（[[Anny]]）拓樸都是固定的，接縫只在做範本時處理一次；每張照片只需要讓接縫帶跟著兩邊的變形平滑過渡。

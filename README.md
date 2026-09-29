@@ -14,4 +14,4 @@
 
 ## Status
 
-🚧 Phase 0：headless VRM 匯出與驗證
+🚧 規劃 v2：Web 優先、不需 CUDA（範本變形）。Phase 0：範本 VRM

@@ -174,3 +174,15 @@
 ### 二次元
 - [hinzka/52blendshapes-for-VRoid-face](https://github.com/hinzka/52blendshapes-for-VRoid-face)：README 允許商用、再散布、免標示（但檔內 VRM meta 寫 `Redistribution_Prohibited`，以 README 為準）。
 - [blender-vrm-perfect-sync](https://github.com/elainyilanchen/blender-vrm-perfect-sync)（MIT，headless Blender）：VRoid 臉拓樸一致 → 逐頂點把 donor 的 52 shapes 拷到任意官方 VRoid 臉。
+
+## 補遺：不需 CUDA / Web 優先（2026-09-29）
+
+新增筆記：[[Template Morphing]]、[[GLB Patching]]、[[Platform Tiers]]、[[Anny]]、[[Meta MHR]]、[[GNM Head]]、[[MediaPipe Tasks Vision]]、[[ONNX Runtime Web and transformers.js]]、[[mflux]]、[[oMLX]]、[[Mac Image-to-3D Ports]]。
+
+重點：
+- 人體專用的重建模型（LHM / PSHuman / SiTH / ECON）**都沒有 Mac / MLX 版**；通用 image-to-3D 在 Mac 上一件要好幾分鐘
+- 範本變形架構可以**整條在瀏覽器裡跑**：MediaPipe → JS 擬合 → GLB patch → UV 投影 + LaMa
+- **MediaPipe 本身就輸出 52 個 ARKit 風格 blendshape** → 瀏覽器用 webcam 就能驗收 Perfect Sync
+- [[Anny]]（NAVER，Apache + CC0）取代非商用的 SMPL-X
+- oMLX 只跑 LLM / VLM，擴散模型要用 mflux
+- MLX 已有 Linux / Windows / CUDA 後端

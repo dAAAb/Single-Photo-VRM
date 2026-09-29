@@ -12,7 +12,10 @@ tags:
 - [[Research Survey]]：完整調研報告（單篇長文版）
 - [[Grok Claims Verification]]：Grok 建議逐項查證
 
-## 核心結論
+## v2 方向（2026-09-29 更新）
+**Web 優先、不需 CUDA**：[[Template Morphing]]（[[Anny]] 身體 + [[ICT-FaceKit]] 頭做成範本 VRM → 瀏覽器用 MediaPipe 擬合 + [[GLB Patching]]）。分層見 [[Platform Tiers]]。
+
+## 核心結論（v1 調研）
 1. 沒有開源工具能一步到位 → 架構是「重建身體 + 範本頭」
 2. 單圖重建的頭沒有眼球、口腔 → 臉用 [[ICT-FaceKit]]（MIT）
 3. 身體直接沿用 SMPL-X 骨架 → [[SMPL-X Weight Transfer]]
@@ -25,12 +28,15 @@ tags:
 - [[Route B - Anime]]
 
 ## 概念
-[[Perfect Sync]] · [[VRM Spec Checklist]] · [[VRM Humanoid Bones]] · [[SMPL-X]] · [[SMPL-X Weight Transfer]] · [[Head-Body Stitching]] · [[Anime Template Assembly]] · [[Licensing Matrix]] · [[Hardware Split]]
+[[Template Morphing]] · [[GLB Patching]] · [[Platform Tiers]] · [[Perfect Sync]] · [[VRM Spec Checklist]] · [[VRM Humanoid Bones]] · [[SMPL-X]] · [[SMPL-X Weight Transfer]] · [[Head-Body Stitching]] · [[Anime Template Assembly]] · [[Licensing Matrix]] · [[Hardware Split]]
 
 ## 工具
+- **Web**：[[MediaPipe Tasks Vision]] · [[ONNX Runtime Web and transformers.js]]
+- **本地加值（MLX）**：[[mflux]] · [[oMLX]] · [[Mac Image-to-3D Ports]]
+- **身體模型**：[[Anny]] · [[Meta MHR]] · [[SMPL-X]]
 - **重建**：[[PSHuman]] · [[LHM]] · [[LHM++]] · [[IDOL]] · [[DiGS-Avatar]] · [[AniGS]] · [[SyncHuman]] · [[SiTH]] · [[ECON]] · [[GeneMAN]] · [[HumanLift]] · [[PERSONA]] · [[TRELLIS.2]] · [[SAM 3D Body]]
 - **綁骨**：[[Make-It-Animatable]] · [[UniRig]] · [[AniGen]] · [[Mesh2Motion]] · [[Other Auto-Riggers]]
-- **臉**：[[ICT-FaceKit]] · [[FLAME]] · [[Photo to Face Fitting]] · [[ARKit Shape Generation]]
+- **臉**：[[ICT-FaceKit]] · [[GNM Head]] · [[FLAME]] · [[Photo to Face Fitting]] · [[ARKit Shape Generation]]
 - **匯出 / 預覽**：[[VRM Add-on for Blender]] · [[UniVRM]] · [[three-vrm]] · [[vrm-validator]]
 - **動作**：[[HY-Motion 1.0]] · [[VRMA Tools]]
 - **二次元**：[[StdGEN]] · [[CharacterGen]] · [[PAniC-3D]] · [[hinzka 52blendshapes]] · [[blender-vrm-perfect-sync]]

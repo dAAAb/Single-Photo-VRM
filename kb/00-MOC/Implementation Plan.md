@@ -1,103 +1,103 @@
-# Single-Photo-VRM 實作規劃
+---
+type: plan
+version: 2
+updated: 2026-09-29
+tags:
+  - plan
+---
+# Single-Photo-VRM 實作規劃 v2：Web 優先、不需 CUDA
 
-> 依據：[[Research Survey]]（2026-09-29 調研，全部一手來源查證）
+> v1（CUDA 身體重建優先）見 git history `77f1adb`。依據：[[Research Survey]]、[[Platform Tiers]]。
 
 ## 目標
 
-一張照片 → 自動產出 **VRM（0.x + 1.0）**，具備：
-1. **標準 humanoid 骨架**（含手指），可直接吃 Mixamo / VRMA 動作
-2. **Perfect Sync 臉**：ARKit 52 blendshapes（含嘴形、`tongueOut`、`eyeLook*`），iPhone Face ID Cam（iFacialMocap / Waidayo）→ VSeeFace / Warudo 一對一驅動
-3. VRM 標準表情 preset（aa/ih/ou/ee/oh、blink、happy…）由 ARKit 組合生成，非 Perfect Sync 的 app 也能用
-4. 全程 headless、可腳本化，不需開 Unity
+一張照片 → 自動產出 **VRM（0.x + 1.0）**：
+1. 標準 humanoid 骨架（含手指）
+2. **[[Perfect Sync]]**：ARKit 52 blendshapes（含嘴形、`tongueOut`、`eyeLook*`），支援 iPhone Face ID Cam 驅動
+3. 先在 **Mac 本地 / 瀏覽器跑，不需 CUDA**；Windows / Linux / Web 跨平台；最後才接 CUDA 加速
 
-**品質對照組**：VTubeMe（$7.99，MetaPerson 系，54 骨 / 66 morph）。
+## 核心轉向：[[Template Morphing]]
 
-## 核心架構：「重建身體 + 範本頭」
-
-調研結論：沒有開源模型能一步到位；而且任何單圖重建出的頭都是封閉表面（沒眼球、沒口腔），**Perfect Sync 在物理上做不出來**。所以臉部不重建，改用帶完整表情 rig 的範本頭擬合照片。
+不在執行時「生成」3D，而是改寫一個事先做好的範本：
 
 ```
-                    ┌─────────────── 臉 (Mac 可跑) ───────────────┐
-照片 ─┬─ 臉部裁切 ─→ MediaPipe landmarks ─→ 擬合 ICT-FaceKit identity
-      │                                  ─→ 照片投影到 ICT UV + inpaint
-      │                                  ─→ ICT 52 表情 delta（+自製 tongueOut）
-      │                                     眼球 / 牙齒 / 舌頭 / 口腔 內建
-      │                                              │
-      └─ 全身 ─→ (可選) 正規化成正面 A-pose           │
-               ─→ PSHuman: 有貼圖 mesh + 對齊 SMPL-X  │  (CUDA GPU)
-               ─→ SMPL-X 權重轉移 + unpose 成 T-pose  │
-               ─→ 切頭 ←──────── 頸部接合 ────────────┘
-                              │
-                     Blender (bpy-vrm-format, headless)
-                     ├─ SMPL-X joint → VRM humanoid（1:1 含手指）
-                     ├─ 52 morph (lowerCamel) + VRM0 clip (PascalCase)
-                     ├─ preset 表情、eye bone + lookAt、MToon、meta
-                     └─ 匯出 VRM0 + VRM1
-                              │
-               vrm-validator + three-vrm 預覽 + iPhone 實測
+開發時（一次性，Blender）
+  Anny 身體 (CC0) + ICT-FaceKit 頭 (MIT) → 接合好的 template.vrm
+  ├─ humanoid 骨架、eye bones、lookAt
+  ├─ 52 ARKit morph（lowerCamel）+ VRM0 PascalCase clip + VRM preset
+  └─ MToon、spring bone、meta
+
+執行時（每張照片，瀏覽器內）
+  照片 → MediaPipe（478 臉點 / 33 身體點 / 髮-膚-衣分割）
+       → JS 最小平方擬合：ICT 100 identity 係數 + Anny 身材參數
+       → 直接 patch GLB：頂點 / 骨頭位置 / inverseBindMatrices（morph delta 不動）
+       → 照片投影到 UV + LaMa 補洞 + 膚色 / 髮色
+       → 下載 VRM0 + VRM1
 ```
 
-**為什麼不用 Grok 的 LHM → Mesh2Motion**：LHM 輸出是 Gaussian 不是 mesh；Mesh2Motion 純 GUI 無法自動化；再綁一次骨等於丟掉 SMPL-X 已有的骨架與權重；且兩者都不處理臉。
+**為什麼可行**：ICT 和 Anny 都是線性模型；表情 morph 本來就是差值，跟臉型無關 → 換臉型時 52 個表情不必重算。頭身接縫也只要在範本裡做一次（見 [[Head-Body Stitching]]）。擬合只是約 1434 個殘差 × 107 個未知數的最小平方問題，純 JS 幾十 ms 就能解（估計值）。
 
-## 開發階段（先打通尾端，再往前推）
+## 三層架構（[[Platform Tiers]]）
 
-### Phase 0 — 匯出與驗證骨架（Mac，無 GPU）
-- [ ] 建 Python 環境，`pip install bpy-vrm-format`，實跑一次 headless 匯出（API 名稱只對過原始碼、未實跑）
-- [ ] 拿 hinzka 的 Perfect Sync VRoid VRM 做 round-trip（讀入 → 匯出 VRM0 + VRM1），確認 52 clip / morph 名稱保留
-- [ ] `vrm-validator` CLI 接進流程
-- [ ] three-vrm 預覽頁：52 個 ARKit slider + VRMA 播放 + Playwright 自動截圖
-- [ ] **實機驗收**：iPhone iFacialMocap → VSeeFace（VRM0）與 Warudo 驅動 round-trip 後的檔案
+| 層 | 環境 | 做什麼 | 狀態 |
+|---|---|---|---|
+| **T0 Web** | 瀏覽器 WebGPU / WebGL / WASM（Chrome、Edge、Safari 26；Firefox 部分支援）| 完整 pipeline 的基本版 + webcam Perfect Sync 預覽 | **第一個做** |
+| **T1 本地加值** | Mac：MLX / MPS / Core ML；Win/Linux：MLX-CUDA / PyTorch | [[mflux]] 生成正面 A-pose 和背面視角 → 更完整的貼圖；Depth Anything；[[oMLX]] 跑 VLM 判斷屬性、當品質評審；（實驗）Mac 版 Hunyuan3D / TRELLIS.2 做衣服幾何 | 第二個做 |
+| **T2 CUDA** | Nebius / Brev / 本機 NVIDIA | [[PSHuman]] / [[LHM]] 做高擬真衣服幾何、加速 T1 | 最後做 |
 
-**完成標準**：一個已知的 Perfect Sync VRM 經我們的匯出器後，在 VSeeFace 用 iPhone 能正常驅動嘴形、眨眼、眼球、舌頭。
+共用核心 = **TypeScript 函式庫**（擬合、GLB patch、貼圖投影），瀏覽器 / Node / Tauri 通用。Python 只在 T1/T2 當 sidecar。桌面版用 Tauri v2 + PyInstaller sidecar 打包三平台。
 
-### Phase 1 — ICT 範本頭 → Perfect Sync VRM（Mac）
-- [ ] 下載 ICT-FaceKit，把平均臉 + 眼球 + 牙齒 + 舌頭組成單一頭部
-- [ ] 51 個 ARKit shape 改名（合併 `browInnerUp`、`cheekPuff` 的 L/R），手雕一次 `tongueOut`
-- [ ] 頭 + 最小身體（SMPL-X 中性身體或 VRoid base）→ VRM
-- [ ] 眼骨 + lookAt；由 ARKit 組合出 VRM preset 表情
+## 開發階段
 
-**完成標準**：「無照片」的 ICT 平均臉 VRM，用 iPhone 驅動的效果達到 Phase 0 的水準。
+### Phase 0 — 範本 VRM（Mac，Blender，一次性）
+- [ ] 裝 Anny（`naver/anny`），匯出中性身體 + rig（104 骨 anny rig → 對 VRM humanoid）
+- [ ] ICT-FaceKit 頭：51 shape 改名（合併 L/R）+ 手雕 `tongueOut` → ARKit 52
+- [ ] **Spike：** 比較 Anny / MPFB 自帶的 Face Units（CC0，傳聞有 54 個 ARKit shape，未驗證）和 ICT。如果 Anny 的臉夠用，就不必接頭，但臉型擬合的自由度會比較低
+- [ ] 頭身接合 + 頸部權重 → 用 [[VRM Add-on for Blender]] 匯出 `template.vrm`（VRM0 + VRM1）
+- [ ] [[vrm-validator]] 通過
 
-### Phase 2 — 照片 → 擬合臉（Mac，MediaPipe 可在 CPU 跑）
-- [ ] MediaPipe Face Landmarker → 對 ICT 100 個 PCA identity mode 做 landmark + photometric 優化
-- [ ] 照片投影到 ICT UV，被遮住的區域 inpaint，再做膚色 albedo 化（去光照）
-- [ ] 評估：用同一個人的多張照片檢查擬合穩定度；和 VTubeMe 做並排比較
+### Phase 1 — Web 檢視器 + Perfect Sync 驗收（瀏覽器）
+- [ ] Vite + three.js + [[three-vrm]] 檢視器
+- [ ] **webcam → MediaPipe Face Landmarker blendshapes → 即時驅動範本的 52 個 morph**（不用 iPhone 就能驗收 Perfect Sync）
+- [ ] 實機驗收：iPhone iFacialMocap → VSeeFace（VRM0）/ Warudo
 
-### Phase 3 — 身體（CUDA GPU：Nebius / Brev H100）
-- [ ] PSHuman（>40 GB VRAM，`with_smpl=true`）跑出有貼圖 mesh + SMPL-X
-- [ ] 最近點轉移 SMPL-X LBS 權重，再做 inverse LBS 把 mesh unpose 成 T-pose
-- [ ] 實驗：先用圖像編輯模型把輸入照片正規化成正面 A-pose，看能不能減少 unpose 在腋下、胯下的破面（假設，待驗證）
-- [ ] 頸部接合：切掉重建頭部 → RBF/Laplacian 混合 → UV 空間融膚色
-- [ ] 對照實驗：LHM++ canonical T-pose Gaussian → 多視角渲染 → 轉 mesh（權重 NC，僅供研究比較）
+**完成標準**：範本 VRM 在瀏覽器 webcam 和 VSeeFace + iPhone 兩邊都能正確驅動嘴形、眨眼、眼球、舌頭。
 
-### Phase 4 — 二次元路線（Mac）
-- [ ] hinzka Perfect Sync VRoid base + blender-vrm-perfect-sync
-- [ ] 照片 → VLM 判斷髮型、髮色、瞳色、膚色、服裝 → 從零件庫挑選、調色；臉部貼圖做風格化 img2img
-- [ ] 進階：StdGEN 生成的分層頭髮 / 服裝 → 掛到 VRoid base，頭髮自動加 spring bone
-- 這條路是調研中發現**還沒人做**的空缺，而且保證輸出合格 VRM
+### Phase 2 — Web 臉型擬合
+- [ ] 一次性標註 MediaPipe 478 點 ↔ ICT 頂點對應（ICT 只附 68 點索引）
+- [ ] JS Levenberg-Marquardt：ICT identity + 頭部姿態，加 PCA 先驗做正則化；用 facial transformation matrix 當初始值
+- [ ] [[GLB Patching]]：改寫 POSITION / NORMAL / min-max，morph delta 保持不動，VRM 擴充欄位逐 byte 保留
+- [ ] 用同一個人的多張照片評估穩定度
 
-### Phase 5 — 動作與產品化
-- [ ] VRMA：bvh2vrma、Mixamo FBX → VRMA、HY-Motion → Blender retarget → VRMA
-- [ ] Web 前端：上傳照片 → 預覽 → 下載 VRM0/VRM1
-- [ ] 選項：iPhone 直連網頁預覽（Node 版 VMC/iFacialMocap UDP bridge → WebSocket → three-vrm）
+### Phase 3 — Web 貼圖
+- [ ] 臉：照片投影到 ICT UV（在 WebGPU 上 render-to-texture），左右對稱補齊，LaMa ONNX 補洞（Apache，208 MB，放在 Worker 裡跑）
+- [ ] 身體：用 MediaPipe 分割結果取膚色、衣服顏色；衣服先做成貼在身體上的貼圖
+- [ ] 頭髮 → 見 Phase 5
 
-## 硬體分工
+### Phase 4 — Web 身材擬合
+- [ ] 把 Anny 線性模型移植成 JS（blendshape + LBS）
+- [ ] Pose world landmarks + 輪廓 → 身高、胖瘦、比例參數（只有一張照片，精度偏粗）
 
-| 階段 | 位置 |
-|---|---|
-| Phase 0 / 1 / 2 / 4、Blender 匯出、驗證 | M4 Max 本機 |
-| Phase 3 身體重建（PSHuman >40 GB） | Nebius / Brev H100 |
+### Phase 5 — 頭髮與衣服（誠實說：這是最大的品質缺口）
+- [ ] 零件庫：CC0 髮型 / 服裝 proxy（MPFB 授權待查），頭髮預先掛好 spring bone
+- [ ] 選零件：分割結果 + 顏色 → 規則式；T1 用 [[oMLX]] 的 VLM 判斷
+- [ ] T1：[[mflux]]（Qwen-Image-Edit-2511 / FLUX.2-klein-4B，Apache）生成背面視角 → 補齊背面貼圖
 
-## 授權（上線前必須決定）
+### Phase 6 — 桌面版與 CUDA
+- [ ] Tauri v2 包 Web UI + Python sidecar（T1 模型第一次執行時才下載）
+- [ ] T2：PSHuman / LHM 衣服幾何 → 包覆到範本外面當衣服層（研究題）
+- [ ] Win / Linux 建置；MLX-CUDA 或 PyTorch CUDA 路徑
 
-| 用途 | 身體 | 臉 |
-|---|---|---|
-| 研究 / 個人 | PSHuman + SMPL-X（非商用）即可 | ICT（MIT） |
-| **商用** | SMPL-X 需向 Meshcapade 買授權；或改用 TRELLIS.2（MIT）+ MIA v1（MIT/Apache，Mixamo 骨架）| ICT（MIT）+ 自寫擬合；**避開** DECA/EMOCA/MICA/FreeUV/BFM |
+## 授權：預設全線可商用
+Anny（Apache + CC0）· ICT-FaceKit（MIT）· MediaPipe（Apache）· Depth Anything V2 **Small**（Apache）· LaMa（Apache）· BiRefNet（MIT）· Qwen-Image-Edit-2511 / FLUX.2-klein-4B / Z-Image-Turbo（Apache）· VRM Add-on（MIT）。
+**避開**：SMPL-X、RMBG、Sapiens、DSINE、MI-GAN、FLUX Kontext-dev / klein-9B、DA-V2 Base 以上。見 [[Licensing Matrix]]。
 
-二次元路線（hinzka + VRM Add-on + StdGEN）可商用。
+## 已知限制
+- 貼在身體上的衣服看不出寬鬆衣物的外型；頭髮只能從零件庫挑 → 要靠 T1/T2 或更大的零件庫補
+- 只有一張照片，深度資訊不足 → 側臉輪廓不準（MediaPipe 的 z 值很弱）
+- Firefox Linux / Android 的 WebGPU 還沒正式上線 → 保留 WASM fallback；MediaPipe 官方只支援 Chrome / Safari
 
-## 待決定事項
-1. **優先做寫實還是二次元？**（建議：Phase 0 → 1 兩條路共用，之後再分岔）
-2. **會不會商用？** 這決定身體要用 SMPL-X 還是 MIT 替代方案。
-3. 手上有沒有 iPhone + iFacialMocap / Waidayo 可以做實機驗收？
+## 待決定
+1. Phase 0 spike：用 Anny 自帶的臉還是 ICT 頭？（要實測）
+2. 頭髮 / 服裝零件庫的來源與授權
+3. Web app 放哪：Cloudflare Pages（純前端，模型從 CDN 下載）？

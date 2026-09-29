@@ -13,3 +13,6 @@ tags:
 | 臉部擬合（MediaPipe + 優化，[[Photo to Face Fitting]]）| M4 Max |
 | [[SMPL-X Weight Transfer]]、[[Head-Body Stitching]] | M4 Max |
 | [[PSHuman]]（>40 GB）、[[StdGEN]]（24 GB）、[[Make-It-Animatable]] | Nebius / Brev H100 |
+
+> [!note] v2 更新
+> 已改為 Web 優先，見 [[Platform Tiers]]。本頁是 v1 的 CUDA 身體重建分工。

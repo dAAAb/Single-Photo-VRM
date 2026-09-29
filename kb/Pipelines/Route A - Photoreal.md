@@ -5,6 +5,8 @@ tags:
   - pipeline
   - photoreal
 ---
+> [!note] v2：主線改成 [[Template Morphing]]（瀏覽器內、不需 CUDA）；以下 v1 的 CUDA 重建流程改當 T2 加值層（[[Platform Tiers]]）。
+
 重建身體 + 範本頭。細節見 [[Implementation Plan]]。
 
 ```
