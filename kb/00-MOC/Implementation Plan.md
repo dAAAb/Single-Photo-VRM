@@ -1,6 +1,6 @@
 # Single-Photo-VRM 實作規劃
 
-> 依據：[RESEARCH.md](RESEARCH.md)（2026-09-29 調研，全部一手來源查證）
+> 依據：[[Research Survey]]（2026-09-29 調研，全部一手來源查證）
 
 ## 目標
 
