@@ -27,11 +27,12 @@ OUTPUTS = {  # name → path template ({id})
     "cutout": "build/fit/{id}/cutout.png", "detections": "build/fit/{id}/detections.png",
     "body_fit": "build/fit/{id}/body_fit.png", "face_fit": "build/fit/{id}/face_fit.png",
     "texture": "build/fit/{id}/texture.png", "back": "build/fit/{id}/back_cutout.png",
+    "turnaround": "build/fit/{id}/turnaround_raw.png",
 }
 
 
 HAIR = {"auto", "none", "short01", "short02", "short03", "short04", "bob01", "bob02", "long01", "ponytail01",
-        "braid01", "afro01"}
+        "braid01", "afro01", "rehmanpolanski_hair_bun_brown", "toigo_blunt_bob_with_bangs"}
 
 
 def run_job(job_id: str, image: Path, gender: str | None, ai_backview: bool = False, extra=()):
@@ -40,7 +41,7 @@ def run_job(job_id: str, image: Path, gender: str | None, ai_backview: bool = Fa
         job["status"] = "running"
         cmd = [sys.executable, str(HERE / "photo2vrm.py"), str(image)] + (["--gender", gender] if gender else [])
         if ai_backview:
-            cmd.append("--ai-backview")
+            cmd.append("--ai-turnaround")
         cmd += list(extra)
         p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in p.stdout:

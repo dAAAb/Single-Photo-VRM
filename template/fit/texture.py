@@ -235,3 +235,116 @@ if __name__ == "__main__":
         w = root / name
         meta = bake(w, json.load(open(w / "params.json")), json.load(open(w / "body_params.json")))
         print(name, f"{time.time()-t:.0f}s", {k: (np.round(v).tolist() if isinstance(v, list) else v) for k, v in meta.items() if k != "texture"})
+
+
+def bake_multiview(work: Path, params: dict, mv: dict, size: int = 1024):
+    """Texture from the AI turnaround views: each texel takes the view that faces it best."""
+    from .multiview import _rotz
+    views = json.load(open(work / "views.json"))
+    lcs = params["local_changes"]
+    model = anny.Anny(topology="anny-full", local_changes=list(lcs), facial_actions="all").to(dtype=torch.float32)
+    L = list(model.bone_labels)
+    def posed(arm_rv):
+        pose = torch.eye(4).repeat(1, model.bone_count, 1, 1)
+        for b, rv in mv["pose_rotvec"].items():
+            r = torch.tensor(rv) + torch.tensor(arm_rv.get(b, [0.0, 0.0, 0.0]))
+            pose[0, L.index(b), :3, :3] = roma.rotvec_to_rotmat(r)
+        with torch.no_grad():
+            return model(pose_parameters=pose, phenotype_kwargs=params["phenotype"],
+                         local_changes_kwargs=lcs)["vertices"][0].numpy()
+    V_views = {name: posed(cam.get("arm_rotvec", {})) for name, cam in mv["multiview"].items()}
+    V = V_views["front"]
+    F = np.asarray(model.faces)
+    uv = model.texture_coordinates.numpy()
+    UI = np.asarray(model.face_texture_coordinate_indices)
+    Wt, It = model.vertex_bone_weights.numpy(), model.vertex_bone_indices.numpy()
+    dom = It[np.arange(len(It)), Wt.argmax(1)]
+    is_hand = np.array([L[b].startswith(("wrist", "finger", "metacarpal")) for b in dom])
+    vpart_mv = np.array([part_of(L[b]) for b in dom])
+    torso_or_leg = np.isin(vpart_mv[F[:, 0]], ("torso", "leg_L", "leg_R"))
+    vd = []
+    for name, cam in mv["multiview"].items():
+        V = V_views[name]
+        n_world = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+        n_world /= np.linalg.norm(n_world, axis=1, keepdims=True) + 1e-12
+        rgba = cv2.cvtColor(cv2.imread(views[name]["path"], cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+        H, W = rgba.shape[:2]
+        R = _rotz(cam["yaw"]).numpy()
+        Vr = V @ R.T
+        P = np.stack([cam["scale"] * Vr[:, 0] + cam["tx"], -cam["scale"] * Vr[:, 2] + cam["ty"]], 1)
+        if name == "front":
+            fk, fface, _ = preprocess.detect(rgba)
+            if fface is not None:
+                P = align_head(model, V, P, {"face": fface.tolist()})
+        Vimg = np.stack([P[:, 0], Vr[:, 1], -P[:, 1]], 1)
+        _, tid, _ = rasterize(Vimg, F, np.zeros((len(F), 3)), center=(W / 2, 0, -H / 2), scale=1.0, size=W)
+        zbuf = np.full((H, W), np.inf, np.float32)
+        cz = Vr[F][:, :, 1].mean(1)
+        zbuf[tid >= 0] = cz[tid[tid >= 0]]
+        cat = preprocess.person_categories(np.ascontiguousarray(rgba[..., :3]))
+        inner = cv2.erode((rgba[..., 3] > 200).astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+        vd.append(dict(name=name, rgba=rgba, P=P, depth=Vr[:, 1], zbuf=zbuf, inner=inner,
+                       skin=(cat == 2) | (cat == 3), facing=-(n_world @ R.T)[:, 1], H=H, W=W))
+
+    tex = np.zeros((size, size, 3), np.float32)
+    best = np.full((size, size), -1.0, np.float32)
+    hand_tex = np.zeros((size, size), bool)
+    for i in range(len(F)):
+        tuv = uv[UI[i]] * [size - 1, -(size - 1)] + [0, size - 1]
+        x0, x1 = int(np.floor(tuv[:, 0].min())), int(np.ceil(tuv[:, 0].max()))
+        y0, y1 = int(np.floor(tuv[:, 1].min())), int(np.ceil(tuv[:, 1].max()))
+        if x1 < x0 or y1 < y0:
+            continue
+        xs, ys = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1))
+        a, b, c = tuv
+        d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-9:
+            continue
+        w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+        w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+        m = (w0 >= -0.02) & (w1 >= -0.02) & (1 - w0 - w1 >= -0.02)
+        if not m.any():
+            continue
+        w = np.stack([w0[m], w1[m], 1 - w0[m] - w1[m]], 1)
+        tx_, ty_ = xs[m], ys[m]
+        hand = is_hand[F[i, 0]]
+        if hand:
+            hand_tex[ty_, tx_] = True
+        for v in vd:
+            score = v["facing"][i]
+            if score < 0.25:
+                continue
+            p = w @ v["P"][F[i]]
+            px = np.clip(p[:, 0].round().astype(int), 0, v["W"] - 1)
+            py = np.clip(p[:, 1].round().astype(int), 0, v["H"] - 1)
+            ok = v["inner"][py, px] & (w @ v["depth"][F[i]] <= v["zbuf"][py, px] + 0.03)
+            if hand:
+                ok &= v["skin"][py, px]
+            elif torso_or_leg[i]:  # a hand hanging in front of the hip/thigh in some view
+                ok &= ~v["skin"][py, px]
+            ok &= score > best[ty_, tx_]
+            tex[ty_[ok], tx_[ok]] = v["rgba"][py[ok], px[ok], :3]
+            best[ty_[ok], tx_[ok]] = score
+    valid = best > 0
+    skin = np.median(np.concatenate([v["rgba"][..., :3][v["skin"] & v["inner"]] for v in vd]), 0) \
+        if any((v["skin"] & v["inner"]).any() for v in vd) else np.array([205, 160, 140], np.float32)
+    fill_hand = hand_tex & ~valid
+    tex[fill_hand] = skin
+    valid |= fill_hand
+    tex8 = np.clip(tex, 0, 255).astype(np.uint8)
+    base = tex8.copy()
+    base[~valid] = skin.astype(np.uint8)
+    filled = cv2.inpaint(base, cv2.dilate((~valid).astype(np.uint8), np.ones((3, 3), np.uint8)), 7, cv2.INPAINT_TELEA)
+    filled[valid] = tex8[valid]
+    out = work / "texture.png"
+    cv2.imwrite(str(out), cv2.cvtColor(filled, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(str(work / "texture_valid.png"), (valid * 255).astype(np.uint8))
+    # iris colour still from the original photo (the AI views are small)
+    rgba0 = cv2.cvtColor(cv2.imread(str(work / "cutout.png"), cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+    det0 = json.load(open(work / "detections.json"))
+    _, hair, iris = region_colors(rgba0, det0, preprocess.person_categories(np.ascontiguousarray(rgba0[..., :3])))
+    meta = {"texture": str(out), "ai_backview": False, "ai_turnaround": True, "skin": skin.tolist(),
+            "hair": None if hair is None else hair.tolist(), "iris": None if iris is None else iris.tolist(),
+            "coverage": float(valid.mean())}
+    json.dump(meta, open(work / "texture.json", "w"), indent=1)
+    return meta

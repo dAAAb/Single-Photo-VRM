@@ -228,7 +228,7 @@ async function photoToVRM(file: File) {
     const job = await (await fetch(`/api/jobs/${id}`)).json();
     genLog.textContent = job.log.join('\n');
     genStatus.textContent = `${job.status === 'queued' ? '排隊中' : job.status === 'running' ? '處理中' : job.status === 'done' ? '完成' : '失敗'} · ${((performance.now() - t0) / 1000).toFixed(0)}s`;
-    for (const k of ['detections', 'body_fit', 'face_fit', 'back', 'texture']) {
+    for (const k of ['turnaround', 'detections', 'body_fit', 'face_fit', 'texture']) {
       if (job.outputs?.includes(k) && !genImages.querySelector(`[data-k="${k}"]`)) {
         genImages.insertAdjacentHTML('beforeend', `<img data-k="${k}" src="/api/files/${id}/${k}" alt="${k}">`);
       }
@@ -236,7 +236,7 @@ async function photoToVRM(file: File) {
     if (job.status === 'done') {
       genLinks.innerHTML = `<a href="/api/files/${id}/vrm0" download="${file.name.replace(/\.[^.]+$/, '')}.vrm0.vrm">下載 VRM 0.x（VSeeFace）</a>`
         + `<a href="/api/files/${id}/vrm1" download="${file.name.replace(/\.[^.]+$/, '')}.vrm1.vrm">下載 VRM 1.0</a>`;
-      for (const k of ['detections', 'body_fit', 'face_fit', 'back', 'texture']) {
+      for (const k of ['turnaround', 'detections', 'body_fit', 'face_fit', 'texture']) {
         if (!genImages.querySelector(`[data-k="${k}"]`)) genImages.insertAdjacentHTML('beforeend', `<img data-k="${k}" src="/api/files/${id}/${k}" alt="" onerror="this.remove()">`);
       }
       await loadVRM(`/api/files/${id}/vrm0`, file.name.replace(/\.[^.]+$/, '') + ' (生成)');

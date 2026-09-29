@@ -36,6 +36,10 @@ def main():
     ap.add_argument("--shoes", default="auto", help="auto (from the photo), none (barefoot) or shoes01–shoes06")
     ap.add_argument("--glasses", default="off", help="off, round or square (frame only)")
     ap.add_argument("--glasses-color", default="20,20,22", help="frame colour R,G,B")
+    ap.add_argument("--ai-turnaround", action="store_true",
+                    help="OPTIONAL: FLUX.2-klein-4B front/side/back T-pose sheet → 3-view body fit + texture (first use downloads ~15 GB)")
+    ap.add_argument("--reuse-ai", action="store_true",
+                    help="reuse an existing AI turnaround sheet for this image instead of generating a new one")
     ap.add_argument("--ai-backview", action="store_true",
                     help="OPTIONAL: generate the back with FLUX.2-klein-4B via mflux (first use downloads ~15 GB)")
     args = ap.parse_args()
@@ -55,7 +59,28 @@ def main():
 
     log("2/6 body fit")
     g0 = GENDER.get(args.gender, 0.5)
+    views = None
+    for stale in ("views.json", "multiview_params.json"):
+        (work / stale).unlink(missing_ok=True)
+    if args.ai_turnaround:
+        from fit import multiview
+        try:
+            sheet = work / "turnaround_raw.png"
+            if not (args.reuse_ai and sheet.exists()):
+                sheet = multiview.generate(work, log=log)
+            else:
+                log("    reusing the existing AI turnaround sheet")
+            views = multiview.split(sheet, work)
+            log(f"    AI turnaround: 3 views (side faces {'left' if views['side']['yaw'] < 0 else 'right'})")
+        except Exception as e:  # never fail the avatar because the optional step failed
+            log(f"    AI turnaround failed ({e}); single-photo fit instead")
+            views = None
     res, pv, pk, obs, faces, V = body.choose_and_fit(work, gender_init=min(max(g0, 0.02), 0.98))
+    if views:
+        mv = multiview.fit(work, views, gender_init=min(max(g0, 0.02), 0.98))
+        log("    3-view fit: " + ", ".join(f"{k} in={v['inside']:.5f} cov={v['coverage']:.5f}" for k, v in mv["multiview"].items()))
+        res.update({k: mv[k] for k in ("phenotype", "local_changes", "multiview")})
+        res["mv_pose_rotvec"] = mv["pose_rotvec"]
     if args.gender:
         res["phenotype"]["gender"] = g0
     mode = "stylized" if res["stylized"] else "realistic"
@@ -80,19 +105,26 @@ def main():
     back = work / "back_cutout.png"
     if back.exists():
         back.unlink()
-    if args.ai_backview:
+    if views:
+        tmeta = texture.bake_multiview(work, params, {"multiview": res["multiview"], "pose_rotvec": res["mv_pose_rotvec"]})
+    if args.ai_backview and not views:
         from fit import backview
         try:
             backview.generate(work, log=log)
         except Exception as e:  # never fail the whole avatar because the optional step failed
             log(f"    AI back view failed ({e}); falling back to geometric fill")
-    tmeta = texture.bake(work, params, res)
-    log(f"    from photo{' + AI back view' if tmeta['ai_backview'] else ''}: {tmeta['coverage']:.0%} of the UV atlas; rest inpainted")
+    if not views:
+        tmeta = texture.bake(work, params, res)
+    log(f"    from {'AI 3 views' if tmeta.get('ai_turnaround') else 'photo'}{' + AI back view' if tmeta.get('ai_backview') else ''}: {tmeta['coverage']:.0%} of the UV atlas; rest inpainted")
 
     log("    hair / eyebrows / eyelashes (MakeHuman CC0 proxies)")
     from fit import hair as hairmod
     hinfo = hairmod.analyse(work, gender_hint=GENDER.get(args.gender))
     style = hinfo["style"] if args.hair == "auto" else args.hair
+    if views and args.hair == "auto":  # back / side views show what the front can't (ponytail, bun)
+        vstyle, why = multiview.hair_style_from_views(work)
+        if vstyle and style not in ("long01", "bob01", "bob02", "afro01", "none"):
+            style, hinfo["reason"] = vstyle, why
     log(f"    hair={style} ({'auto: ' + str(hinfo['reason']) if args.hair == 'auto' else 'user choice'})")
     hair_rgb = hinfo["hair_rgb"] or tmeta.get("hair") or [60, 45, 35]
     brow_rgb = hinfo["brow_rgb"] or [c * 0.6 for c in hair_rgb]

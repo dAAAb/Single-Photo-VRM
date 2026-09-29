@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 ASSETS = Path(__file__).resolve().parents[2] / "third_party" / "makehuman_assets" / "system"
+PACKS = [ASSETS, ASSETS.parent / "hair01"]  # CC0 packs only (hair02/03 are CC-BY)
 
 
 def to_mh(v):
@@ -55,7 +56,7 @@ def _ranges(tokens):
 
 
 def load(kind: str, name: str) -> Proxy:
-    d = ASSETS / kind / name
+    d = next((p / kind / name for p in PACKS if (p / kind / name).is_dir()), ASSETS / kind / name)
     mhclo = next(d.glob("*.mhclo"))
     refs, weights, offsets, scales, obj_file = [], [], [], {}, None
     deleted = []
