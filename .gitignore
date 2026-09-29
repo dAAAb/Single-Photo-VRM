@@ -11,3 +11,7 @@ outputs/
 kb/.obsidian/workspace*.json
 kb/.obsidian/cache
 kb/.trash/
+
+# third-party sources (cloned, not vendored)
+third_party/
+build/

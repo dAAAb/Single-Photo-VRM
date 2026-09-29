@@ -63,7 +63,8 @@ export function runChecks(vrm: VRM): CheckRow[] {
   rows.push({ label: '手指骨', status: fingers === 30 ? 'ok' : fingers ? 'warn' : 'fail', detail: `${fingers} / 30` });
 
   const exprs = new Set((vrm.expressionManager?.expressions ?? []).map((e) => e.expressionName));
-  const presetMissing = VRM_PRESETS.filter((p) => !exprs.has(p));
+  // VRM0 has no 'surprised' preset (three-vrm keeps VRM0 custom clips under their own names).
+  const presetMissing = VRM_PRESETS.filter((p) => !exprs.has(p) && !(isVRM0 && p === 'surprised'));
   rows.push({ label: 'VRM 表情 preset', status: presetMissing.length > 4 ? 'fail' : presetMissing.length ? 'warn' : 'ok', detail: presetMissing.length ? `缺：${presetMissing.join(', ')}` : '齊全' });
 
   const ar = arkitReport(vrm);

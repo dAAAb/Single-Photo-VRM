@@ -59,12 +59,34 @@ tags:
 - [x] Webcam：MediaPipe 追蹤臉 → 即時驅動 52 表情 + 頭部轉動（沒 Perfect Sync 的模型用 preset 近似）
 - [x] 視線跟隨、spring bone 開關、截圖
 
-### Phase 0b — 範本 VRM（Mac，Blender，一次性）
+### Phase 0b — 範本 VRM（Mac，Blender，一次性）✅ 基本版完成
+
+> [!success] Spike 結論（2026-09-29）：**只用 Anny，不接 ICT 頭**
+> Anny v0.6 的 `facial_actions` 剛好就是 **ARKit 52 個名稱**（Face Units，CC0），而且網格裡有**獨立的舌頭（226 頂點）和左右眼球**，還有 `eye.L/R` 眼骨。`tongueOut` 只會動舌頭。唯一缺的是牙齒。
+> → 省掉頭身接合，全線 Apache + CC0。見 [[Anny]]。
+
+產出：`template/build.sh` → `build/template.vrm1.vrm`、`build/template.vrm0.vrm`
+- [x] Anny → T-pose（world-orient 參數化，手臂 ±X、腿垂直）、腳底平移到 y=0
+- [x] 52 ARKit shape key（lowerCamel）+ VRM1 custom expression + VRM0 PascalCase clip
+- [x] VRM preset（aa/ih/ou/ee/oh、blink、happy/angry/sad/relaxed/surprised）由 ARKit 組合
+- [x] humanoid 對應：15 必要骨 + 30 手指骨 + 肩、胸、頸、眼；lookAt = 眼骨
+- [x] 材質：膚色、舌頭、眼睛（鞏膜 / 虹膜 / 瞳孔依幾何切分）
+- [x] Khronos glTF validator：VRM1 0 錯誤 0 警告；VRM0 0 錯誤（1 個 VRM0 擴充命名的固有警告）
+- [x] [[VRM Test Bench]]：VRM0 在 VSeeFace 52/52、Warudo 52/52、lookAt 骨頭型；走 / 跑 / 表情都正常
+- [ ] 牙齒（CC0 MakeHuman teeth proxy 或自製）
+- [ ] 皮膚 / 眼睛貼圖（目前是純色）
+- [ ] 頭髮（零件庫，見 Phase 5）
+- [ ] 檔案大小：52 個 morph 各存完整頂點 → 約 19 MB；改用 sparse accessor
+- [ ] mrxz/vrm-validator（需要 Dart SDK，還沒跑）
+
+<details><summary>原本的 Phase 0b 待辦（已被 spike 取代）</summary>
+
 - [ ] 裝 Anny（`naver/anny`），匯出中性身體 + rig（104 骨 anny rig → 對 VRM humanoid）
 - [ ] ICT-FaceKit 頭：51 shape 改名（合併 L/R）+ 手雕 `tongueOut` → ARKit 52
 - [ ] **Spike：** 比較 Anny / MPFB 自帶的 Face Units（CC0，傳聞有 54 個 ARKit shape，未驗證）和 ICT。如果 Anny 的臉夠用，就不必接頭，但臉型擬合的自由度會比較低
 - [ ] 頭身接合 + 頸部權重 → 用 [[VRM Add-on for Blender]] 匯出 `template.vrm`（VRM0 + VRM1）
 - [ ] [[vrm-validator]] 通過；在 [[VRM Test Bench]] 全部檢查為綠燈
+</details>
 
 ### Phase 1 — Perfect Sync 驗收
 - [ ] 在 [[VRM Test Bench]] 用 webcam 驅動範本 VRM 的 52 個 morph
@@ -107,6 +129,6 @@ Anny（Apache + CC0）· ICT-FaceKit（MIT）· MediaPipe（Apache）· Depth An
 - Firefox Linux / Android 的 WebGPU 還沒正式上線 → 保留 WASM fallback；MediaPipe 官方只支援 Chrome / Safari
 
 ## 待決定
-1. Phase 0 spike：用 Anny 自帶的臉還是 ICT 頭？（要實測）
+1. ~~Phase 0 spike：Anny 自帶的臉還是 ICT 頭？~~ → **Anny**（見 Phase 0b）
 2. 頭髮 / 服裝零件庫的來源與授權
 3. Web app 放哪：Cloudflare Pages（純前端，模型從 CDN 下載）？

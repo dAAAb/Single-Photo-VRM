@@ -9,11 +9,11 @@ tags:
 > [!tip] v2 核心架構
 > 不在執行時生成 3D，而是**改寫一個事先做好的範本 VRM**：擬合參數 → patch 頂點 / 骨頭 → 投影貼圖。整條 pipeline 都能在瀏覽器裡跑。
 
-**開發時一次性（Blender）**：[[Anny]] 身體 + [[ICT-FaceKit]] 頭 → 接合 → 52 ARKit morph + VRM preset + eye bones + spring bone → `template.vrm`（[[VRM Add-on for Blender]]）
+**開發時一次性（Blender）**：[[Anny]]（身體 + 臉都用它；2026-09-29 spike 後不再接 ICT 頭）→ 52 ARKit morph + VRM preset + eye bones + spring bone → `template.vrm`（[[VRM Add-on for Blender]]）
 
 **每張照片（瀏覽器）**：
 1. [[MediaPipe Tasks Vision]]：478 臉點、33 身體點、髮 / 膚 / 衣分割
-2. JS LM 擬合：ICT 100 identity + 頭部姿態；Anny 身材參數
+2. JS LM 擬合：Anny 臉部 local change + 身材參數 + 頭部姿態（臉部 local change 的自由度待評估）
 3. [[GLB Patching]]：base 頂點、骨頭 translation、inverseBindMatrices
 4. UV 投影 + LaMa 補洞（[[ONNX Runtime Web and transformers.js]]）
 5. 下載 VRM0 + VRM1
