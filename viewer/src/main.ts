@@ -504,4 +504,4 @@ resize();
 tick();
 
 // Expose for automated testing.
-Object.assign(window, { __bench: { get vrm() { return vrm; }, get mixer() { return mixer; }, get action() { return activeAction; }, clips, loco, face, sliderValues, handleFiles, frame } });
+Object.assign(window, { __bench: { get vrm() { return vrm; }, camera, controls, get mixer() { return mixer; }, get action() { return activeAction; }, clips, loco, face, sliderValues, handleFiles, frame } });

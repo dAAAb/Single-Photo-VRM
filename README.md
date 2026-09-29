@@ -11,37 +11,33 @@
 
 ---
 
-## 案例：插腰的西裝照
+## 案例：半蹲的戶外照片 → 站立的 T-pose 虛擬人
 
-輸入只有一張正面照，手插在腰上、不是 T-pose：
+輸入只有一張照片：戶外背景、半蹲、雙手扶膝，完全不是 T-pose。
 
-<img src="docs/images/case_input.jpg" width="260" alt="輸入照片：插腰的西裝男子">
+<img src="docs/images/demo_input.jpg" width="260" alt="輸入照片：戴毛帽、半蹲的男子">
 
-### 無 AI（預設，約 45 秒）
+<sub>照片：Barbara Olsen via [Pexels](https://www.pexels.com/photo/7869640/)（Pexels License）</sub>
 
-| 正面 | 背面 |
-|---|---|
-| ![無 AI 正面](docs/images/case_noai_front.jpg) | ![無 AI 背面](docs/images/case_noai_back.jpg) |
+### 結果比較
 
-- 體型、臉型、姿勢都從這一張照片擬合；輸出一律是 T-pose
-- 背面沒有照片可用 → 用正面顏色延伸到背面，所以背面也是西裝，但細節較少
-- **限制**：插腰的手在正面照裡擋住了西裝，腰部會留下手的痕跡
+| 無 AI · 正面 | 無 AI · 背面 | 有 AI 三視圖 · 正面 | 有 AI 三視圖 · 背面 |
+|:---:|:---:|:---:|:---:|
+| ![無 AI 正面](docs/images/demo_noai_front.jpg) | ![無 AI 背面](docs/images/demo_noai_back.jpg) | ![有 AI 正面](docs/images/demo_ai_front.jpg) | ![有 AI 背面](docs/images/demo_ai_back.jpg) |
 
-### 有 AI 三視圖（勾選「AI 三視圖」，約 2 分鐘）
+**無 AI（預設，約 70 秒）**
+- 自動去背，從這一張照片擬合體型、臉型與姿勢，輸出站立的 T-pose
+- 限制：半蹲時被手和膝蓋遮住的部位只能推測，所以腿部貼圖較糊；後腦與背面沒有照片可用，只能延伸正面顏色
 
-AI（FLUX.2-klein-4B）先把照片變成遊戲設計用的三視圖：正面、側面、背面，並去除眼鏡與臉部飾品：
+**有 AI 三視圖（勾選「AI 三視圖」，約 2 分鐘）**
 
-![AI 三視圖](docs/images/case_turnaround.jpg)
+AI（FLUX.2-klein-4B，在 Mac 上用 MLX 執行）先把照片變成站姿的三視圖，並去除眼鏡等臉部飾品：
 
-| 正面 | 背面 |
-|---|---|
-| ![有 AI 正面](docs/images/case_ai_front.jpg) | ![有 AI 背面](docs/images/case_ai_back.jpg) |
+![AI 三視圖](docs/images/demo_turnaround.jpg)
 
 - 三個視角**一起**擬合體型：側面決定胸、腹、臀的厚度
-- 貼圖從最正對的視角取色 → **正面沒有手的痕跡、背面是真正的西裝背面**
+- 每個貼圖點取自最正對它的視角 → 外套、褲子乾淨完整，**背面是真正的背面**（連毛帽都在）
 - 臉部貼圖預設仍取自原始照片（較像本人），可改成 AI 正面（去除眼鏡）
-
----
 
 ## 快速開始
 
@@ -85,6 +81,9 @@ template/.venv/bin/python template/photo2vrm.py photo.jpg --ai-turnaround # 加�
 
 `viewer/` 是瀏覽器測試台，任何 VRM 都能拖進來測試：
 
+![VRM Test Bench](docs/images/demo_testbench.jpg)
+
+
 - **WASD** 移動、**Shift** 跑、**空白鍵** 跳，鏡頭跟隨；內建走 / 跑 / 跳動作，不需動畫檔
 - 拖入 `.vrma` 或 Mixamo `.fbx` 播放，或指定為待機 / 走 / 跑 / 跳
 - 表情滑桿、Perfect Sync 52 滑桿；**Webcam 即時驅動**（MediaPipe，全部在瀏覽器內處理）
@@ -123,7 +122,7 @@ template/.venv/bin/python template/photo2vrm.py photo.jpg --ai-turnaround # 加�
 | 身體 + 臉型擬合 | 約 15 秒 |
 | 貼圖 + 頭髮 / 鞋子 | 約 10 秒 |
 | Blender 產生 VRM | 約 10 秒 |
-| **合計（無 AI）** | **約 40–60 秒** |
+| **合計（無 AI）** | **約 40–70 秒** |
 | AI 三視圖（選配） | +約 45 秒生成 + 三視角擬合；MLX 記憶體峰值約 23 GB |
 
 ## 授權與素材
