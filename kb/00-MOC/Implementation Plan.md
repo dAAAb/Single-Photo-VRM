@@ -73,7 +73,8 @@ tags:
 - [x] 材質：膚色、舌頭、眼睛（鞏膜 / 虹膜 / 瞳孔依幾何切分）
 - [x] Khronos glTF validator：VRM1 0 錯誤 0 警告；VRM0 0 錯誤（1 個 VRM0 擴充命名的固有警告）
 - [x] [[VRM Test Bench]]：VRM0 在 VSeeFace 52/52、Warudo 52/52、lookAt 骨頭型；走 / 跑 / 表情都正常
-- [ ] 牙齒（CC0 MakeHuman teeth proxy 或自製）
+- [x] 牙齒：`anny-full` 拓樸保留 MakeHuman 的 `helper-upper/lower-teeth`（CC0），Face Units 本來就會讓**下排牙跟著 jawOpen / jawLeft / jawRight / jawForward 動**，上排固定
+- [x] Phase 1 實機驗收（使用者，2026-09-29）：webcam 眨眼、張嘴、左右方向正確；Perfect Sync 可驅動
 - [ ] 皮膚 / 眼睛貼圖（目前是純色）
 - [ ] 頭髮（零件庫，見 Phase 5）
 - [ ] 檔案大小：52 個 morph 各存完整頂點 → 約 19 MB；改用 sparse accessor

@@ -98,8 +98,9 @@ def build():
     labels, counts = np.unique(comp, return_counts=True)
     body_label = labels[np.argmax(counts)]
     tongue_mask = np.abs(d["deltas"][ARKIT.index("tongueOut")]).sum(1) > 1e-5
+    teeth_mask = d["teeth"] if "teeth" in d else np.zeros(len(verts), bool)
     mats = {k: make_material(k, c) for k, c in {
-        "Skin": (0.86, 0.68, 0.58, 1), "Mouth": (0.72, 0.36, 0.38, 1),
+        "Skin": (0.86, 0.68, 0.58, 1), "Mouth": (0.72, 0.36, 0.38, 1), "Teeth": (0.93, 0.91, 0.86, 1),
         "Sclera": (0.95, 0.95, 0.93, 1), "Iris": (0.33, 0.22, 0.13, 1), "Pupil": (0.02, 0.02, 0.02, 1)}.items()}
     for m in mats.values():
         me.materials.append(m)
@@ -109,13 +110,15 @@ def build():
         if lab == body_label:
             continue
         vs = np.where(comp == lab)[0]
-        if tongue_mask[vs].mean() > 0.5:
+        if tongue_mask[vs].mean() > 0.5 or teeth_mask[vs].mean() > 0.5:
             continue
         eye_centers[lab] = verts[vs].mean(0)
     for p in me.polygons:
         f = faces[p.index]
         lab = comp[f[0]]
-        if lab == body_label:
+        if teeth_mask[f].all():
+            p.material_index = order.index("Teeth")
+        elif lab == body_label:
             p.material_index = order.index("Skin")
         elif tongue_mask[f].all():
             p.material_index = order.index("Mouth")

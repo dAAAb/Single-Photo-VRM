@@ -11,6 +11,24 @@ import roma
 import torch
 
 ARKIT_52 = json.load(open("arkit52.json"))
+BASE_OBJ = anny.__file__.rsplit("/", 1)[0] + "/data/mpfb2/3dobjs/base.obj"
+TEETH_GROUPS = ("helper-upper-teeth", "helper-lower-teeth")
+
+
+def obj_group_tris(path, group_names):
+    """Triangulated (vertex, uv) index lists of the given groups in the MakeHuman base mesh (CC0)."""
+    vs, uvs, cur = [], [], None
+    for line in open(path):
+        if line.startswith("g "):
+            cur = line.split()[1]
+        elif line.startswith("f ") and cur in group_names:
+            toks = [t.split("/") for t in line.split()[1:]]
+            v = [int(t[0]) - 1 for t in toks]
+            u = [int(t[1]) - 1 for t in toks]
+            for a, b, c in ((0, 1, 2), (0, 2, 3))[: len(v) - 2]:
+                vs.append([v[a], v[b], v[c]])
+                uvs.append([u[a], u[b], u[c]])
+    return np.array(vs, np.int32), np.array(uvs, np.int32)
 
 # Anny bone → VRM humanoid bone. Anny bones not listed stay as non-humanoid (twist / helper) bones.
 VRM_BONES = {
@@ -46,7 +64,8 @@ def main():
     ap.add_argument("--out", default="../build/anny_tpose.npz")
     args = ap.parse_args()
 
-    model = anny.Anny(facial_actions="all").to(dtype=torch.float32)
+    # "anny-full" keeps MakeHuman helper vertices, which include the teeth; Face Units move the lower teeth.
+    model = anny.Anny(facial_actions="all", topology="anny-full").to(dtype=torch.float32)
     assert list(model.facial_action_labels) == ARKIT_52 or set(model.facial_action_labels) == set(ARKIT_52)
     labels = list(model.bone_labels)
     idx = {n: i for i, n in enumerate(labels)}
@@ -120,17 +139,28 @@ def main():
         if np.linalg.norm(tails[i] - heads[i]) < 1e-3:
             tails[i] = heads[i] + np.array([0, 0, 0.02])
 
-    faces = np.asarray(model.faces, dtype=np.int32)
     uv = model.texture_coordinates.numpy().astype(np.float32)
-    uv_idx = np.asarray(model.face_texture_coordinate_indices, dtype=np.int32)
+    body_faces = np.asarray(model.faces, dtype=np.int32)
+    teeth_faces, teeth_uv = obj_group_tris(BASE_OBJ, TEETH_GROUPS)
+    faces = np.concatenate([body_faces, teeth_faces])
+    uv_idx = np.concatenate([np.asarray(model.face_texture_coordinate_indices, dtype=np.int32), teeth_uv])
     w_idx = model.vertex_bone_indices.numpy().astype(np.int32)
     w = model.vertex_bone_weights.numpy().astype(np.float32)
+
+    # Drop helper vertices that no face references (tights, skirt, hair helpers, joints, …).
+    used = np.unique(faces)
+    remap = -np.ones(len(verts), np.int64)
+    remap[used] = np.arange(len(used))
+    faces = remap[faces].astype(np.int32)
+    verts, deltas, w_idx, w = verts[used], deltas[:, used], w_idx[used], w[used]
+    teeth = np.zeros(len(used), bool)
+    teeth[np.unique(faces[len(body_faces):])] = True
 
     np.savez_compressed(
         args.out, verts=verts.astype(np.float32), faces=faces, uv=uv, uv_idx=uv_idx,
         w_idx=w_idx, w=w, heads=heads.astype(np.float32), tails=tails.astype(np.float32),
         parents=np.array(parents, np.int32), labels=np.array(labels), arkit=np.array(ARKIT_52),
-        deltas=deltas, vrm_map=np.array(json.dumps(VRM_BONES)),
+        deltas=deltas, vrm_map=np.array(json.dumps(VRM_BONES)), teeth=teeth,
     )
     print(f"wrote {args.out}: {len(verts)} verts, {len(faces)} faces, {B} bones, {len(ARKIT_52)} shapes;"
           f" height {verts[:, 2].max() - verts[:, 2].min():.3f} m, max delta {np.abs(deltas).max():.4f}")
