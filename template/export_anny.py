@@ -59,13 +59,46 @@ def rot_between(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.eye(3) + vx + vx @ vx * (1 / (1 + c))
 
 
+def bake_bone_scales(verts, deltas, heads, tails, parents, w_idx, w, labels, scales):
+    """Uniformly scale bones about their heads (children inherit), baked into the rest (T-)pose.
+    Used for stylized/cartoon proportions that no human shape target can reach."""
+    B = len(labels)
+    assert all(p < i for i, p in enumerate(parents)), "bones must be topologically ordered"
+    M = np.tile(np.eye(4), (B, 1, 1))
+    for i in range(B):
+        P = M[parents[i]] if parents[i] >= 0 else np.eye(4)
+        sc = scales.get(labels[i], 1.0)
+        if sc != 1.0:
+            c = heads[i]
+            S = np.eye(4)
+            S[:3, :3] *= sc
+            S[:3, 3] = c - sc * c
+            M[i] = P @ S
+        else:
+            M[i] = P
+    A = np.einsum("vk,vkij->vij", w, M[w_idx])  # per-vertex blended affine
+    verts_h = np.concatenate([verts, np.ones((len(verts), 1))], 1)
+    new_verts = np.einsum("vij,vj->vi", A, verts_h)[:, :3]
+    new_deltas = np.einsum("vij,kvj->kvi", A[:, :3, :3], deltas)
+    new_heads = np.array([(M[parents[i]] if parents[i] >= 0 else np.eye(4)) @ np.append(heads[i], 1) for i in range(B)])[:, :3]
+    new_tails = np.array([M[i] @ np.append(tails[i], 1) for i in range(B)])[:, :3]
+    return new_verts.astype(np.float32), new_deltas.astype(np.float32), new_heads.astype(np.float32), new_tails.astype(np.float32)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="../build/anny_tpose.npz")
+    ap.add_argument("--params", help="fitted parameters JSON (phenotype / local_changes / bone_scale)")
     args = ap.parse_args()
+    params = json.load(open(args.params)) if args.params else {}
+    pheno = params.get("phenotype") or None
+    lcs = params.get("local_changes") or {}
+    bone_scale = params.get("bone_scale") or {}
 
     # "anny-full" keeps MakeHuman helper vertices, which include the teeth; Face Units move the lower teeth.
-    model = anny.Anny(facial_actions="all", topology="anny-full").to(dtype=torch.float32)
+    model = anny.Anny(facial_actions="all", topology="anny-full",
+                      local_changes=list(lcs) if lcs else "none").to(dtype=torch.float32)
+    shape_kw = {"phenotype_kwargs": pheno, "local_changes_kwargs": lcs or None}
     assert list(model.facial_action_labels) == ARKIT_52 or set(model.facial_action_labels) == set(ARKIT_52)
     labels = list(model.bone_labels)
     idx = {n: i for i, n in enumerate(labels)}
@@ -73,7 +106,7 @@ def main():
     B = len(labels)
 
     ident = torch.eye(4)[None, None].repeat(1, B, 1, 1)
-    rest = model(pose_parameters=ident)
+    rest = model(pose_parameters=ident, **shape_kw)
     rest_poses = rest["bone_poses"][0].numpy()  # (B,4,4) world, rest (A-pose)
     head = rest_poses[:, :3, 3]
 
@@ -97,13 +130,11 @@ def main():
     pose[0, 0, :3, 3] = torch.from_numpy(rest_poses[0, :3, 3]).float()
 
     def run(fa=None):
-        o = model(pose_parameters=pose, facial_actions=fa or {}, pose_parameterization="world-orient")
+        o = model(pose_parameters=pose, facial_actions=fa or {}, pose_parameterization="world-orient", **shape_kw)
         return o["vertices"][0].numpy(), o["bone_poses"][0].numpy()
 
     verts, poses = run()
     heads = poses[:, :3, 3]
-    # VRM: feet on the ground (y=0 in glTF = z=0 here). Anny's origin is at the pelvis.
-    ground = np.array([0, 0, verts[:, 2].min()], np.float32)
     # sanity: T-pose arms level, legs vertical
     for s in "LR":
         arm = heads[idx[f"wrist.{s}"]] - heads[idx[f"upperarm01.{s}"]]
@@ -113,8 +144,6 @@ def main():
     deltas = np.zeros((len(ARKIT_52), *verts.shape), np.float32)
     for k, name in enumerate(ARKIT_52):
         deltas[k] = run({name: 1.0})[0] - verts
-    verts = verts - ground
-    heads = heads - ground
 
     # Tails: first child head, else extend along parent direction.
     children = {i: [j for j in range(B) if parents[j] == i] for i in range(B)}
@@ -143,6 +172,13 @@ def main():
     body_faces = np.asarray(model.faces, dtype=np.int32)
     teeth_faces, teeth_uv = obj_group_tris(BASE_OBJ, TEETH_GROUPS)
     faces = np.concatenate([body_faces, teeth_faces])
+    if bone_scale:
+        verts, deltas, heads, tails = bake_bone_scales(
+            verts, deltas, heads, tails, parents, model.vertex_bone_indices.numpy(),
+            model.vertex_bone_weights.numpy(), labels, bone_scale)
+    # VRM: feet on the ground (y=0 in glTF = z=0 here). Anny's origin is at the pelvis.
+    ground = np.array([0, 0, verts[:, 2].min()], np.float32)
+    verts, heads, tails = verts - ground, heads - ground, tails - ground
     uv_idx = np.concatenate([np.asarray(model.face_texture_coordinate_indices, dtype=np.int32), teeth_uv])
     w_idx = model.vertex_bone_indices.numpy().astype(np.int32)
     w = model.vertex_bone_weights.numpy().astype(np.float32)

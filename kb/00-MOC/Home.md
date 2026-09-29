@@ -28,7 +28,7 @@ tags:
 - [[Route B - Anime]]
 
 ## 概念
-[[Template Morphing]] · [[GLB Patching]] · [[Platform Tiers]] · [[VRM Test Bench]] · [[Perfect Sync]] · [[VRM Spec Checklist]] · [[VRM Humanoid Bones]] · [[SMPL-X]] · [[SMPL-X Weight Transfer]] · [[Head-Body Stitching]] · [[Anime Template Assembly]] · [[Licensing Matrix]] · [[Hardware Split]]
+[[Template Morphing]] · [[GLB Patching]] · [[Platform Tiers]] · [[VRM Test Bench]] · [[Photo Fitting Pipeline]] · [[Perfect Sync]] · [[VRM Spec Checklist]] · [[VRM Humanoid Bones]] · [[SMPL-X]] · [[SMPL-X Weight Transfer]] · [[Head-Body Stitching]] · [[Anime Template Assembly]] · [[Licensing Matrix]] · [[Hardware Split]]
 
 ## 工具
 - **Web**：[[MediaPipe Tasks Vision]] · [[ONNX Runtime Web and transformers.js]]

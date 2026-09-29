@@ -15,6 +15,16 @@ cd viewer && npm install && npm run dev   # → http://localhost:5188
 - VRM 表情和 Perfect Sync 52 滑桿；**Webcam 即時驅動**（MediaPipe，全部在瀏覽器內處理）
 - 相容性檢查：必要骨、手指、preset、52 ARKit 分別對 VSeeFace（VRM0 PascalCase）和 Warudo（lowerCamel morph）檢查
 
+## 照片 → VRM
+
+```bash
+template/build.sh                                   # 一次性：Python 環境、VRM Add-on、模型
+template/.venv/bin/python template/photo2vrm.py photo.png   # CLI → build/out/photo.vrm0.vrm / .vrm1.vrm
+template/.venv/bin/python template/server.py        # 或：啟動本機 API，再到 Test Bench「生成」頁籤拖入照片
+```
+
+任何人形照片（T-pose 或任意姿勢、真人或卡通）→ 去背置中 → 身形 + 臉型擬合 → T-pose Perfect Sync VRM。Mac CPU 約 35–60 秒，不需 CUDA。
+
 ## 知識庫
 
 `kb/` 是 Obsidian vault（用「Open folder as vault」開啟 `kb/`），從 `kb/00-MOC/Home.md` 開始：
@@ -25,4 +35,7 @@ cd viewer && npm install && npm run dev   # → http://localhost:5188
 ## Status
 
 - ✅ Phase 0a：VRM Test Bench
-- 🚧 Phase 0b：範本 VRM（Anny 身體 + ICT-FaceKit 頭）
+- ✅ Phase 0b：範本 VRM（Anny：身體 + ARKit 52 臉 + 舌頭 + 牙齒）
+- ✅ Phase 1：Perfect Sync 實機驗收（webcam / iPhone + VSeeFace）
+- ✅ Phase 2：照片 → 身形 + 臉型擬合（Python 原型，拖放介面）
+- 🚧 Phase 3：貼圖

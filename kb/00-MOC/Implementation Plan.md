@@ -95,13 +95,32 @@ tags:
 
 **完成標準**：範本 VRM 在瀏覽器 webcam 和 VSeeFace + iPhone 兩邊都能正確驅動嘴形、眨眼、眼球、舌頭。
 
-### Phase 2 — Web 臉型擬合
+### Phase 2 — 照片 → 身形 + 臉型擬合 ✅ Python 原型（Mac，不需 CUDA）
+
+> 先用 Python（Anny 目前只有 PyTorch 版）驗證方法，再移植到 Web。見 [[Photo Fitting Pipeline]]。
+
+入口：`template/photo2vrm.py <任意人形照片>` → `build/out/<name>.vrm0.vrm / .vrm1.vrm`（約 35–60 秒）；
+介面：[[VRM Test Bench]] 的「生成」頁籤，拖入照片 → 本機 API（`template/server.py`）→ 自動載入 VRM。
+
+- [x] 去背 + 置中：真 alpha 優先；否則 MediaPipe 多類別人像分割 + 姿勢骨架 + 邊框色模型 → GrabCut
+- [x] 偵測：MediaPipe Pose（21 點）+ Face Landmarker（478 點 + 51 blendshape），臉部用放大的頭部裁切
+- [x] 身體擬合：Anny 6 phenotype + 23 個身形 local change + 17 根骨頭的姿勢（只用來解釋照片，輸出一律 T-pose）+ 正交相機；關鍵點 + 輪廓（在內 / 覆蓋）
+- [x] **非 T-pose**：坐、蹲、跳、插腰都能擬合；姿勢被丟掉，輸出 T-pose
+- [x] **卡通 / 風格化模式**：臉寬 / 身高 > 0.15 時啟用（真人 ≈ 0.08，Mario 0.19）；骨頭縮放（頭、手、腳、腿、胸）+ 形狀外插；T-pose 輪廓時固定標準 T-pose
+- [x] 臉型擬合：MediaPipe 478 ↔ Anny 對應**自動建立**（渲染 Anny 臉 → 跑 MediaPipe → 三角形 + 重心座標）；約 110 個臉部 local change + 頭部剛體；照片表情用 MediaPipe blendshape 當 Anny facial action 固定，不會把笑容擬合成臉型；左右對稱先驗
+- [x] 回歸測試：`template/run_suite.sh` 跑 `test_images/` 全部 + `build/qa_sheet.png`（9 張全過）
+- [ ] 性別：單張輪廓無法可靠判斷 → 目前靠使用者提示（`--gender`）；T1 交給 VLM
+- [ ] 豐腴體型會被低估（覆蓋損失保守，避免被寬鬆衣服誤導）
+- [ ] 卡通非 T-pose、卡通臉型（MediaPipe 在卡通臉上不可靠）
+- [ ] 移植到 Web（JS 版 Anny 線性模型 + 擬合）
+
+### Phase 2b — Web 臉型擬合（移植）
 - [ ] 一次性標註 MediaPipe 478 點 ↔ ICT 頂點對應（ICT 只附 68 點索引）
 - [ ] JS Levenberg-Marquardt：ICT identity + 頭部姿態，加 PCA 先驗做正則化；用 facial transformation matrix 當初始值
 - [ ] [[GLB Patching]]：改寫 POSITION / NORMAL / min-max，morph delta 保持不動，VRM 擴充欄位逐 byte 保留
 - [ ] 用同一個人的多張照片評估穩定度
 
-### Phase 3 — Web 貼圖
+### Phase 3 — 貼圖（下一步：像不像主要靠這個）
 - [ ] 臉：照片投影到 ICT UV（在 WebGPU 上 render-to-texture），左右對稱補齊，LaMa ONNX 補洞（Apache，208 MB，放在 Worker 裡跑）
 - [ ] 身體：用 MediaPipe 分割結果取膚色、衣服顏色；衣服先做成貼在身體上的貼圖
 - [ ] 頭髮 → 見 Phase 5

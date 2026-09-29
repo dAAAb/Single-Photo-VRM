@@ -15,3 +15,6 @@ kb/.trash/
 # third-party sources (cloned, not vendored)
 third_party/
 build/
+
+# test inputs (third-party images, not redistributable)
+test_images/

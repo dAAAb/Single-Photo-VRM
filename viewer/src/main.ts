@@ -172,7 +172,8 @@ async function handleFiles(files: FileList | File[]) {
   for (const f of list) {
     const url = URL.createObjectURL(f);
     try {
-      if (/\.(vrm|glb)$/i.test(f.name)) await loadVRM(url, f.name);
+      if (/\.(png|jpe?g|webp)$/i.test(f.name)) await photoToVRM(f);
+      else if (/\.(vrm|glb)$/i.test(f.name)) await loadVRM(url, f.name);
       else if (/\.vrma$/i.test(f.name)) await addClip(url, f.name, 'vrma');
       else if (/\.fbx$/i.test(f.name)) await addClip(url, f.name, 'fbx');
       else toast(`不支援的檔案：${f.name}`);
@@ -182,6 +183,56 @@ async function handleFiles(files: FileList | File[]) {
     } finally {
       URL.revokeObjectURL(url);
     }
+  }
+}
+
+// ---------- photo → VRM (local Python pipeline via /api) ----------
+const genStatus = document.querySelector('#gen-status')!;
+const genLog = document.querySelector('#gen-log')!;
+const genLinks = document.querySelector('#gen-links')!;
+const genImages = document.querySelector('#gen-images')!;
+document.querySelector('#gen-pick')!.addEventListener('click', () => fileInput.click());
+
+async function photoToVRM(file: File) {
+  document.querySelector<HTMLButtonElement>('[data-tab="gen"]')!.click();
+  const gender = document.querySelector<HTMLSelectElement>('#gen-gender')!.value;
+  genStatus.textContent = `上傳 ${file.name}…`;
+  genLog.textContent = '';
+  genLinks.innerHTML = '';
+  genImages.innerHTML = '';
+  let res: Response;
+  try {
+    res = await fetch(`/api/photo2vrm${gender ? `?gender=${gender}` : ''}`, {
+      method: 'POST', body: file, headers: { 'X-Filename': file.name },
+    });
+  } catch {
+    genStatus.textContent = '連不上本機 API，請先執行 template/.venv/bin/python template/server.py';
+    return;
+  }
+  if (!res.ok) { genStatus.textContent = `API 錯誤 ${res.status}（server.py 有在跑嗎？）`; return; }
+  const { id } = await res.json();
+  const t0 = performance.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const job = await (await fetch(`/api/jobs/${id}`)).json();
+    genLog.textContent = job.log.join('\n');
+    genStatus.textContent = `${job.status === 'queued' ? '排隊中' : job.status === 'running' ? '處理中' : job.status === 'done' ? '完成' : '失敗'} · ${((performance.now() - t0) / 1000).toFixed(0)}s`;
+    for (const k of ['detections', 'body_fit', 'face_fit']) {
+      if (job.outputs?.includes(k) && !genImages.querySelector(`[data-k="${k}"]`)) {
+        genImages.insertAdjacentHTML('beforeend', `<img data-k="${k}" src="/api/files/${id}/${k}" alt="${k}">`);
+      }
+    }
+    if (job.status === 'done') {
+      genLinks.innerHTML = `<a href="/api/files/${id}/vrm0" download="${file.name.replace(/\.[^.]+$/, '')}.vrm0.vrm">下載 VRM 0.x（VSeeFace）</a>`
+        + `<a href="/api/files/${id}/vrm1" download="${file.name.replace(/\.[^.]+$/, '')}.vrm1.vrm">下載 VRM 1.0</a>`;
+      for (const k of ['detections', 'body_fit', 'face_fit']) {
+        if (!genImages.querySelector(`[data-k="${k}"]`)) genImages.insertAdjacentHTML('beforeend', `<img data-k="${k}" src="/api/files/${id}/${k}" alt="" onerror="this.remove()">`);
+      }
+      await loadVRM(`/api/files/${id}/vrm0`, file.name.replace(/\.[^.]+$/, '') + ' (生成)');
+      document.querySelector<HTMLButtonElement>('[data-tab="gen"]')!.click();
+      return;
+    }
+    if (job.status === 'error' || job.status === 'unknown') return;
   }
 }
 

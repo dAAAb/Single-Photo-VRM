@@ -72,3 +72,7 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
   #stage { height: 55vh; flex: none; }
   #panel { width: 100%; flex: 1; border-left: 0; border-top: 1px solid var(--line); }
 }
+#gen-log { font: 11px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 8px; border-radius: 6px; min-height: 2em; }
+#gen-images img { width: 100%; border-radius: 6px; margin-top: 8px; border: 1px solid var(--line); }
+#gen-links a { margin-right: 10px; color: var(--accent); }
+section select { font: inherit; padding: 3px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }

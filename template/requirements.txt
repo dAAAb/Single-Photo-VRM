@@ -1,0 +1,7 @@
+# Python 3.12 venv (uv venv -p 3.12 .venv && uv pip install -r requirements.txt -e ../third_party/anny)
+torch
+trimesh
+numpy
+roma
+# 1.0.1's macOS wheel aborts in the detector's Metal init; 0.10.35's float masks crash → only uint8 masks used
+mediapipe==0.10.35

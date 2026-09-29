@@ -9,7 +9,7 @@ mkdir -p "$ROOT/build"
 
 if [ ! -d .venv ]; then
   uv venv -q -p 3.12 .venv
-  uv pip install -q -p .venv/bin/python -e "$ROOT/third_party/anny" trimesh numpy
+  uv pip install -q -p .venv/bin/python -e "$ROOT/third_party/anny" -r requirements.txt
 fi
 if [ ! -d "$ROOT/build/blender_user/extensions" ]; then
   curl -sL -o "$ROOT/build/vrm_ext.zip" \
@@ -24,3 +24,9 @@ BLENDER_USER_RESOURCES="$ROOT/build/blender_user" "$BLENDER" -b --python build_v
 mkdir -p "$ROOT/viewer/public/samples"
 cp "$ROOT/build/template.vrm1.vrm" "$ROOT/build/template.vrm0.vrm" "$ROOT/viewer/public/samples/"
 echo "→ build/template.vrm1.vrm, build/template.vrm0.vrm (also copied to viewer/public/samples/)"
+mkdir -p "$ROOT/build/models"
+for u in https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task \
+         https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
+         https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite; do
+  [ -f "$ROOT/build/models/$(basename "$u")" ] || curl -sL -o "$ROOT/build/models/$(basename "$u")" "$u"
+done

@@ -10,7 +10,8 @@
   <div id="stage">
     <canvas id="c"></canvas>
     <div id="drop-hint">
-      <div class="big">把 .vrm 拖進來</div>
+      <div class="big">把 .vrm 或人形照片拖進來</div>
+      <div>照片（.png / .jpg）會自動去背、擬合身形與臉型，生成 Perfect Sync VRM</div>
       <div>動作：.vrma 或 Mixamo .fbx（拖進來後可指定到 待機 / 走 / 跑 / 跳）</div>
       <button id="open-btn">或選擇檔案…</button>
       <button id="sample-btn" hidden>載入範例模型</button>
@@ -27,12 +28,24 @@
       <div id="model-name">尚未載入</div>
     </header>
     <nav id="tabs">
+      <button data-tab="gen">生成</button>
       <button data-tab="check" class="on">檢查</button>
       <button data-tab="motion">動作</button>
       <button data-tab="expr">表情</button>
       <button data-tab="sync">Perfect Sync</button>
       <button data-tab="cam">Webcam</button>
     </nav>
+    <section data-pane="gen">
+      <p class="note">拖進任何人形照片（T-pose 或任意姿勢、真人或卡通）。需要先啟動本機 API：<code>template/.venv/bin/python template/server.py</code></p>
+      <label class="row">性別提示
+        <select id="gen-gender"><option value="">自動</option><option value="female">女</option><option value="male">男</option></select>
+      </label>
+      <button id="gen-pick">選擇照片…</button>
+      <div id="gen-status" class="note"></div>
+      <pre id="gen-log"></pre>
+      <div id="gen-links"></div>
+      <div id="gen-images"></div>
+    </section>
     <section data-pane="check" class="on">
       <table id="checks"></table>
       <h3>Meta</h3>
@@ -70,7 +83,7 @@
       <div id="cam-values"></div>
     </section>
   </aside>
-  <input type="file" id="file" accept=".vrm,.vrma,.fbx,.glb" multiple hidden />
+  <input type="file" id="file" accept=".vrm,.vrma,.fbx,.glb,.png,.jpg,.jpeg,.webp" multiple hidden />
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>
