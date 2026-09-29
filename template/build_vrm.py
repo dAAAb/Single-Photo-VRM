@@ -95,8 +95,13 @@ def build():
         p.use_smooth = True
 
     # --- materials: skin / tongue / eye (sclera, iris, pupil)
-    comp = components(len(verts), faces)
-    labels, counts = np.unique(comp, return_counts=True)
+    group = d["face_group"] if "face_group" in d else np.zeros(len(faces), np.int32)
+    pmats = json.loads(str(d["proxy_mats"])) if "proxy_mats" in d else []
+    comp = components(len(verts), faces[group == 0])
+    body_verts = np.zeros(len(verts), bool)
+    body_verts[faces[group == 0].reshape(-1)] = True
+    comp[~body_verts] = -1
+    labels, counts = np.unique(comp[body_verts], return_counts=True)
     body_label = labels[np.argmax(counts)]
     tongue_mask = np.abs(d["deltas"][ARKIT.index("tongueOut")]).sum(1) > 1e-5
     teeth_mask = d["teeth"] if "teeth" in d else np.zeros(len(verts), bool)
@@ -115,12 +120,29 @@ def build():
             r, g, b = (c / 255 for c in TEX["iris"])
             mats["Iris"].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (r, g, b, 1)
             mats["Iris"].diffuse_color = (r, g, b, 1)
+    for pm in pmats:  # MakeHuman proxies: textured, alpha-clipped (glTF alphaMode MASK)
+        m = make_material(pm["name"], tuple(c / 255 for c in pm["color"]) + (1,) if pm.get("color") else (0.3, 0.2, 0.15, 1))
+        if pm.get("texture"):
+            nt = m.node_tree
+            bsdf = nt.nodes["Principled BSDF"]
+            img = bpy.data.images.load(pm["texture"])
+            img.pack()
+            tex = nt.nodes.new("ShaderNodeTexImage")
+            tex.image = img
+            nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+            gt = nt.nodes.new("ShaderNodeMath")  # alpha > 0.5 → exported as MASK with cutoff
+            gt.operation = "GREATER_THAN"
+            gt.inputs[1].default_value = 0.5
+            nt.links.new(tex.outputs["Alpha"], gt.inputs[0])
+            nt.links.new(gt.outputs[0], bsdf.inputs["Alpha"])
+            m.use_backface_culling = False
+        mats[pm["name"]] = m
     for m in mats.values():
         me.materials.append(m)
     order = list(mats)
     eye_centers = {}
     for lab in labels:
-        if lab == body_label:
+        if lab == body_label or lab < 0:
             continue
         vs = np.where(comp == lab)[0]
         if tongue_mask[vs].mean() > 0.5 or teeth_mask[vs].mean() > 0.5:
@@ -129,6 +151,9 @@ def build():
     for p in me.polygons:
         f = faces[p.index]
         lab = comp[f[0]]
+        if group[p.index] > 0:
+            p.material_index = order.index(pmats[group[p.index] - 1]["name"])
+            continue
         if teeth_mask[f].all():
             p.material_index = order.index("Teeth")
         elif lab == body_label:
@@ -177,6 +202,147 @@ def build():
     mod = ob.modifiers.new("Armature", "ARMATURE")
     mod.object = arm
     return arm, ob
+
+
+def hair_chains(arm, ob, n_seg=4):
+    """Bone chains for the hanging part of the hair (ponytail, long hair, braids) so it can swing.
+
+    Hanging = hair vertices below ear level; clustered by azimuth around the head (back / left /
+    right). Each cluster gets a chain following its centre line from the scalp down; vertices are
+    weighted along the chain and blended with the head near the root."""
+    group = d["face_group"] if "face_group" in d else None
+    pmats = json.loads(str(d["proxy_mats"])) if "proxy_mats" in d else []
+    hair_groups = [k + 1 for k, pm in enumerate(pmats) if pm["kind"] == "hair"]
+    if group is None or not hair_groups:
+        return []
+    faces = d["faces"]
+    hv = np.unique(faces[np.isin(group, hair_groups)].reshape(-1))
+    V = d["verts"]
+    li = LABELS.index
+    head_c = d["heads"][li("head")] + np.array([0, 0, 0.09])  # ~ middle of the head
+    ear_z = d["heads"][li("head")][2] + 0.02
+    hang = hv[V[hv, 2] < ear_z]
+    if len(hang) < 40:
+        return []
+    rel = V[hang] - head_c
+    az = np.degrees(np.arctan2(rel[:, 0], rel[:, 1]))  # 0° = straight back (+Y)
+    sectors = {"back": np.abs(az) <= 55, "left": az > 55, "right": az < -55}
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.data.edit_bones
+    chains = []
+    weights = {}
+    for sname, m in sectors.items():
+        vs = hang[m]
+        if len(vs) < 30:
+            continue
+        z = V[vs, 2]
+        top, bot = z.max() + 0.01, z.min()
+        if top - bot < 0.06:
+            continue
+        # centre line: centroids of height bands, starting at the scalp attachment
+        levels = np.linspace(top, bot, n_seg + 1)
+        pts = [V[hv][np.abs(V[hv, 2] - top) < 0.03].mean(0) if sname == "back" else V[vs][z > top - 0.03].mean(0)]
+        for a, b in zip(levels[1:-1], levels[2:]):
+            band = vs[(z <= a + 0.02) & (z >= b - 0.02)]
+            pts.append(V[band].mean(0) if len(band) else pts[-1] + np.array([0, 0, -(top - bot) / n_seg]))
+        pts.append(V[vs][z < bot + 0.02].mean(0))
+        names = []
+        parent = eb["head"]
+        for k in range(n_seg):
+            b = eb.new(f"hair_{sname}_{k}")
+            b.head, b.tail = Vector(pts[k].tolist()), Vector(pts[k + 1].tolist())
+            if (b.tail - b.head).length < 0.01:
+                b.tail = b.head + Vector((0, 0, -0.02))
+            b.parent = parent
+            b.use_connect = False
+            parent = b
+            names.append(b.name)
+        # weights along the chain (by height), blended with the head near the root
+        t = np.clip((top - z) / (top - bot), 0, 1)
+        for vi, tv in zip(vs, t):
+            f = tv * n_seg
+            k = min(int(f), n_seg - 1)
+            frac = f - k
+            root = min(1.0, tv / 0.15)
+            ws = {names[k]: (1 - frac) * root}
+            if k + 1 < n_seg:
+                ws[names[k + 1]] = frac * root
+            weights[int(vi)] = (root, ws)
+        chains.append(names)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for vi, (root, ws) in weights.items():
+        for g in ob.vertex_groups:  # scale down the original (head / body) influence
+            try:
+                wv = g.weight(vi)
+            except RuntimeError:
+                continue
+            g.add([vi], wv * (1 - root), "REPLACE")
+        for name, wv in ws.items():
+            vg = ob.vertex_groups.get(name) or ob.vertex_groups.new(name=name)
+            vg.add([vi], wv, "ADD")
+    return chains
+
+
+SPRING = dict(stiffness=1.2, gravity_power=0.15, drag_force=0.45, hit_radius=0.02)
+COLLIDERS = [("head", 0.1, (0.0, 0.07, 0.0)), ("neck01", 0.06, (0.0, 0.0, 0.0)),
+             ("spine01", 0.11, (0.0, 0.0, 0.0)), ("clavicle.L", 0.06, (0.0, 0.1, 0.0)),
+             ("clavicle.R", 0.06, (0.0, 0.1, 0.0))]
+
+
+def setup_springs_vrm1(arm, chains):
+    sb = ext(arm).spring_bone1
+    if not chains or len(sb.springs):
+        return
+    ctx = bpy.context
+    cg = sb.add_collider_group()
+    cg.vrm_name = "body"
+    for bone, r, off in COLLIDERS:
+        c = sb.add_collider(ctx, arm)
+        c.node.bone_name = bone
+        c.shape.sphere.radius = r
+        c.shape.sphere.offset = off
+        cg.add_collider().collider_uuid = c.uuid
+    for names in chains:
+        sp = sb.add_spring()
+        sp.vrm_name = names[0].rsplit("_", 1)[0]
+        for n in names:
+            j = sp.add_joint()
+            j.node.bone_name = n
+            j.stiffness, j.gravity_power = SPRING["stiffness"], SPRING["gravity_power"]
+            j.drag_force, j.hit_radius = SPRING["drag_force"], SPRING["hit_radius"]
+        sp.add_collider_group().collider_group_uuid = cg.uuid
+
+
+def setup_springs_vrm0(arm, chains):
+    import uuid as _uuid
+    sa = ext(arm).vrm0.secondary_animation
+    if not chains or len(sa.bone_groups):
+        return
+    cgs = []
+    for bone, r, _ in COLLIDERS:
+        cg = sa.collider_groups.add()
+        cg.uuid = _uuid.uuid4().hex
+        cg.node.bone_name = bone
+        empty = bpy.data.objects.new(f"collider_{bone}", None)
+        bpy.context.scene.collection.objects.link(empty)
+        empty.parent = arm
+        empty.parent_type = "BONE"
+        empty.parent_bone = bone
+        empty.empty_display_type = "SPHERE"
+        empty.empty_display_size = r
+        pb = arm.data.bones[bone]
+        empty.location = (0, -pb.length + (0.07 if bone == "head" else 0.0), 0)  # parent is the bone tail
+        cg.colliders.add().bpy_object = empty
+        cgs.append(cg)
+    for names in chains:
+        g = sa.bone_groups.add()
+        g.comment = names[0].rsplit("_", 1)[0]
+        g.stiffiness, g.gravity_power = SPRING["stiffness"], SPRING["gravity_power"]
+        g.drag_force, g.hit_radius = SPRING["drag_force"], SPRING["hit_radius"]
+        g.bones.add().bone_name = names[0]
+        for cg in cgs:
+            g.collider_groups.add().collider_group_uuid = cg.uuid
 
 
 def ext(arm):
@@ -292,8 +458,12 @@ def export(path, arm=None):
 
 
 arm, body = build()
+CHAINS = hair_chains(arm, body)
+print("HAIR CHAINS", CHAINS)
 setup_vrm1(arm, body)
+setup_springs_vrm1(arm, CHAINS)
 export(OUT + ".vrm1.vrm", arm)
 setup_vrm0(arm, body)
+setup_springs_vrm0(arm, CHAINS)
 export(OUT + ".vrm0.vrm")
 bpy.ops.wm.save_as_mainfile(filepath=OUT + ".blend")

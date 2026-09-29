@@ -30,3 +30,8 @@ for u in https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_la
          https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite; do
   [ -f "$ROOT/build/models/$(basename "$u")" ] || curl -sL -o "$ROOT/build/models/$(basename "$u")" "$u"
 done
+if [ ! -d "$ROOT/third_party/makehuman_assets/system" ]; then  # CC0 hair / eyebrows / eyelashes / shoes
+  mkdir -p "$ROOT/third_party/makehuman_assets"
+  curl -sL -o /tmp/mh_system_cc0.zip https://files.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip
+  unzip -q -o /tmp/mh_system_cc0.zip -d "$ROOT/third_party/makehuman_assets/system" && rm /tmp/mh_system_cc0.zip
+fi

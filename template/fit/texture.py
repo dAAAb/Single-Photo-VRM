@@ -81,10 +81,9 @@ def align_head(model, V, P, det):
     return P * (1 - wh) + Pw * wh
 
 
-def region_colors(rgba, det):
+def region_colors(rgba, det, cat):
     """Median hair / skin / iris colours from the photo (MediaPipe categories + iris landmarks)."""
     rgb = rgba[..., :3]
-    cat = preprocess.person_categories(np.ascontiguousarray(rgb))
     alpha = rgba[..., 3] > 200
     def med(m, fallback):
         px = rgb[m & alpha]
@@ -132,8 +131,13 @@ def bake(work: Path, params: dict, body_res: dict, size: int = 1024):
 
     n = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
     n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
-    skin, hair, iris = region_colors(rgba, det)
-    alpha = rgba[..., 3] > 127
+    cat = preprocess.person_categories(np.ascontiguousarray(rgba[..., :3]))
+    skin, hair, iris = region_colors(rgba, det, cat)
+    # Only sample well inside the silhouette: border pixels mix in the removed background.
+    inner = cv2.erode((rgba[..., 3] > 200).astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+    alpha = inner
+    skin_px = (cat == 2) | (cat == 3)
+    is_hand = np.array([labels[b].startswith(("wrist", "finger", "metacarpal")) for b in dom])
 
     back = None  # optional AI back view (fit/backview.py), mirrored horizontally
     if (work / "back_cutout.png").exists():
@@ -141,7 +145,17 @@ def bake(work: Path, params: dict, body_res: dict, size: int = 1024):
         back = cv2.resize(back, (W, H))
     tex = np.zeros((size, size, 3), np.float32)
     valid = np.zeros((size, size), bool)
-    head_tris = np.array([vpart[f[0]] == "head" for f in F])
+    hand_tex = np.zeros((size, size), bool)
+    torso_or_leg = np.array([vpart[f[0]] in ("torso", "leg_L", "leg_R") for f in F])
+    # Hair colour only on the scalp: pure head-bone vertices above the ears (not the nape / neck).
+    head_w = (Wt * (It == labels.index("head"))).sum(1)
+    ear_y = chin_y = None
+    if det.get("face"):
+        f = np.array(det["face"])
+        ear_y, chin_y = (f[234, 1] + f[454, 1]) / 2, f[152, 1]
+    tri_y = P[F][:, :, 1].mean(1)
+    scalp_limit = (ear_y + 0.3 * (chin_y - ear_y)) if ear_y is not None else np.inf
+    head_tris = (head_w[F].min(1) > 0.9) & (tri_y < scalp_limit)
     eps = 0.03  # m
     for i in range(len(F)):
         tuv = uv[UI[i]] * [size - 1, -(size - 1)] + [0, size - 1]
@@ -167,6 +181,7 @@ def bake(work: Path, params: dict, body_res: dict, size: int = 1024):
         py = np.clip(pimg[:, 1].round().astype(int), 0, H - 1)
         tx_, ty_ = xs[m], ys[m]
         facing = n[i, 1] < -0.1  # towards the camera
+        grazing = -0.35 < n[i, 1] < 0.35  # nearly edge-on: stretched, unreliable colour
         inside = alpha[py, px]
         visible = inside & (depth <= zbuf[py, px] + eps)
         same_part = front_part[py, px] == vpart[F[i, 0]]
@@ -181,11 +196,21 @@ def bake(work: Path, params: dict, body_res: dict, size: int = 1024):
             vis_hair = visible & (n[i, 2] > 0.3)
             col[vis_hair] = rgba[py[vis_hair], px[vis_hair], :3]
         else:
-            ok = visible | (~facing & inside & same_part)
+            back_fill = ~facing & inside & same_part
+            if torso_or_leg[i]:  # don't carry hands/arms in front of the body onto its back
+                back_fill &= ~skin_px[py, px]
+            ok = (visible | back_fill) & ~grazing
+            if is_hand[F[i, 0]]:  # hands must show skin (e.g. hands on hips over a shirt)
+                ok &= skin_px[py, px]
+                hand_tex[ty_, tx_] = True
             col = rgba[py, px, :3].astype(np.float32)
         tex[ty_[ok], tx_[ok]] = col[ok]
         valid[ty_[ok], tx_[ok]] = True
 
+    # Hands without a reliable skin sample get the skin colour rather than neighbouring clothes.
+    fill_hand = hand_tex & ~valid
+    tex[fill_hand] = skin
+    valid |= fill_hand
     # Fill the rest in UV space (occluded / outside silhouette), then bleed past island borders.
     tex8 = np.clip(tex, 0, 255).astype(np.uint8)
     hole = (~valid).astype(np.uint8)

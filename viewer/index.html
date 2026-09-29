@@ -36,12 +36,35 @@
       <button data-tab="cam">Webcam</button>
     </nav>
     <section data-pane="gen">
-      <p class="note">拖進任何人形照片（T-pose 或任意姿勢、真人或卡通）。需要先啟動本機 API：<code>template/.venv/bin/python template/server.py</code></p>
-      <label class="row">性別提示
-        <select id="gen-gender"><option value="">自動</option><option value="female">女</option><option value="male">男</option></select>
-      </label>
-      <label class="row"><input type="checkbox" id="gen-ai-back" /> AI 生成背面貼圖（選用：FLUX.2-klein-4B，Apache-2.0；第一次會下載約 15 GB，之後每張約 1 分鐘）</label>
-      <button id="gen-pick">選擇照片…</button>
+      <p class="note">拖進一張人形照片（任何姿勢、真人或卡通），自動生成 Perfect Sync VRM。</p>
+      <button id="gen-pick" class="primary">選擇照片…</button>
+      <details id="gen-advanced">
+        <summary>進階設定</summary>
+        <label class="row">性別
+          <select id="gen-gender"><option value="">自動</option><option value="female">女</option><option value="male">男</option></select>
+        </label>
+        <label class="row">髮型
+          <select id="gen-hair">
+            <option value="auto">自動</option><option value="none">無 / 光頭</option>
+            <option value="short02">短髮</option><option value="short04">平頭</option><option value="short01">短髮 2</option><option value="short03">短髮 3</option>
+            <option value="bob01">鮑伯頭</option><option value="bob02">鮑伯頭（旁分）</option><option value="long01">長直髮</option>
+            <option value="ponytail01">馬尾</option><option value="braid01">辮子</option><option value="afro01">爆炸頭</option>
+          </select>
+        </label>
+        <label class="row">鞋子
+          <select id="gen-shoes">
+            <option value="auto">自動</option><option value="none">光腳</option>
+            <option value="shoes05">白色運動鞋</option><option value="shoes06">藍色運動鞋</option><option value="shoes02">休閒鞋</option>
+            <option value="shoes01">棕色皮鞋</option><option value="shoes04">黑色皮鞋</option><option value="shoes03">黑色靴子</option>
+          </select>
+        </label>
+        <label class="row">眼鏡
+          <select id="gen-glasses"><option value="off">無</option><option value="round">圓框</option><option value="square">方框</option></select>
+          <input type="color" id="gen-glasses-color" value="#141416" />
+        </label>
+        <label class="row"><input type="checkbox" id="gen-ai-back" /> AI 生成背面（首次下載約 15 GB）</label>
+        <p class="note">正面照看不到後腦，綁起來的頭髮（如馬尾）請手動選髮型。</p>
+      </details>
       <div id="gen-status" class="note"></div>
       <pre id="gen-log"></pre>
       <div id="gen-links"></div>

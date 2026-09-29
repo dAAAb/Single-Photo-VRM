@@ -89,6 +89,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="../build/anny_tpose.npz")
     ap.add_argument("--params", help="fitted parameters JSON (phenotype / local_changes / bone_scale)")
+    ap.add_argument("--proxies", help='JSON list of MakeHuman CC0 proxies: [{"kind","name","texture"}]')
     args = ap.parse_args()
     params = json.load(open(args.params)) if args.params else {}
     pheno = params.get("phenotype") or None
@@ -183,6 +184,43 @@ def main():
     w_idx = model.vertex_bone_indices.numpy().astype(np.int32)
     w = model.vertex_bone_weights.numpy().astype(np.float32)
 
+    # MakeHuman proxies (hair / eyebrows / eyelashes) bind to hm08 = anny-full indices: fit them
+    # before compaction so they get positions, the 52 expression deltas and skin weights.
+    extra = []
+    hidden = set()  # base vertices covered by clothes (MakeHuman delete_verts)
+    for spec in (json.load(open(args.proxies)) if args.proxies else []):
+        from fit import proxies
+        if spec["kind"] == "glasses":  # procedural, rigid on the head bone
+            from fit import glasses
+            gv, gt = glasses.build(verts, spec.get("name", "round"))
+            gi = np.zeros((len(gv), w.shape[1]), np.int32)
+            gi[:, 0] = labels.index("head")
+            gw = np.zeros((len(gv), w.shape[1]), np.float32)
+            gw[:, 0] = 1.0
+            extra.append((spec, gv, np.zeros((deltas.shape[0], len(gv), 3), np.float32), gi, gw, gt,
+                          np.zeros((1, 2), np.float32), np.zeros_like(gt)))
+            continue
+        p = proxies.load(spec["kind"], spec["name"])
+        if p.delete_verts is not None and len(p.delete_verts):
+            hidden.update(p.delete_verts.tolist())
+        pv = proxies.fit(p, verts).astype(np.float32)
+        pdl = proxies.delta(p, deltas).astype(np.float32)
+        pi, pw = proxies.skin(p, w_idx, w, max_inf=w.shape[1])
+        tris, utris = [], []
+        for f, uf in zip(p.faces, p.uv_faces):
+            for a, b, c in ((0, 1, 2), (0, 2, 3))[: len(f) - 2]:
+                tris.append([f[a], f[b], f[c]])
+                utris.append([uf[a], uf[b], uf[c]])
+        extra.append((spec, pv, pdl, pi, pw, np.array(tris, np.int32), p.uvs, np.array(utris, np.int32)))
+
+    n_body = len(body_faces)
+    if hidden:  # hide body faces fully covered by clothes (feet inside shoes) so they can't poke through
+        hmask = np.zeros(len(verts), bool)
+        hmask[list(hidden)] = True
+        keep = ~hmask[faces].all(1)
+        keep[n_body:] = True  # never drop teeth
+        n_body = int(keep[:n_body].sum())
+        faces, uv_idx = faces[keep], uv_idx[keep]
     # Drop helper vertices that no face references (tights, skirt, hair helpers, joints, …).
     used = np.unique(faces)
     remap = -np.ones(len(verts), np.int64)
@@ -190,13 +228,27 @@ def main():
     faces = remap[faces].astype(np.int32)
     verts, deltas, w_idx, w = verts[used], deltas[:, used], w_idx[used], w[used]
     teeth = np.zeros(len(used), bool)
-    teeth[np.unique(faces[len(body_faces):])] = True
+    teeth[np.unique(faces[n_body:])] = True
+    face_group = np.zeros(len(faces), np.int32)
+    proxy_mats = []
+    for k, (spec, pv, pdl, pi, pw, tris, puv, utris) in enumerate(extra, start=1):
+        faces = np.concatenate([faces, tris + len(verts)])
+        uv_idx = np.concatenate([uv_idx, utris + len(uv)])
+        uv = np.concatenate([uv, puv])
+        verts = np.concatenate([verts, pv])
+        deltas = np.concatenate([deltas, pdl], 1)
+        w_idx, w = np.concatenate([w_idx, pi]), np.concatenate([w, pw])
+        teeth = np.concatenate([teeth, np.zeros(len(pv), bool)])
+        face_group = np.concatenate([face_group, np.full(len(tris), k, np.int32)])
+        proxy_mats.append({"name": spec["kind"] + "_" + spec["name"], "kind": spec["kind"],
+                           "texture": spec.get("texture"), "color": spec.get("color")})
 
     np.savez_compressed(
         args.out, verts=verts.astype(np.float32), faces=faces, uv=uv, uv_idx=uv_idx,
         w_idx=w_idx, w=w, heads=heads.astype(np.float32), tails=tails.astype(np.float32),
         parents=np.array(parents, np.int32), labels=np.array(labels), arkit=np.array(ARKIT_52),
         deltas=deltas, vrm_map=np.array(json.dumps(VRM_BONES)), teeth=teeth,
+        face_group=face_group, proxy_mats=np.array(json.dumps(proxy_mats)),
     )
     print(f"wrote {args.out}: {len(verts)} verts, {len(faces)} faces, {B} bones, {len(ARKIT_52)} shapes;"
           f" height {verts[:, 2].max() - verts[:, 2].min():.3f} m, max delta {np.abs(deltas).max():.4f}")

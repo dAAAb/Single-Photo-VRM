@@ -14,7 +14,7 @@ import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -30,13 +30,18 @@ OUTPUTS = {  # name → path template ({id})
 }
 
 
-def run_job(job_id: str, image: Path, gender: str | None, ai_backview: bool = False):
+HAIR = {"auto", "none", "short01", "short02", "short03", "short04", "bob01", "bob02", "long01", "ponytail01",
+        "braid01", "afro01"}
+
+
+def run_job(job_id: str, image: Path, gender: str | None, ai_backview: bool = False, extra=()):
     job = jobs[job_id]
     with run_lock:
         job["status"] = "running"
         cmd = [sys.executable, str(HERE / "photo2vrm.py"), str(image)] + (["--gender", gender] if gender else [])
         if ai_backview:
             cmd.append("--ai-backview")
+        cmd += list(extra)
         p = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in p.stdout:
             if line.startswith("[photo2vrm]") or "Error" in line or "failed" in line:
@@ -62,18 +67,29 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         if not 0 < n <= MAX_BYTES:
             return self._json({"error": "empty or too large"}, 413)
-        ext = Path(self.headers.get("X-Filename", "photo.png")).suffix.lower()
+        ext = Path(unquote(self.headers.get("X-Filename", "photo.png"))).suffix.lower()
         if ext not in (".png", ".jpg", ".jpeg", ".webp"):
             return self._json({"error": "unsupported image type"}, 415)
         gender = parse_qs(u.query).get("gender", [None])[0]
         gender = gender if gender in ("female", "male") else None
-        ai_backview = parse_qs(u.query).get("ai_backview", ["0"])[0] == "1"
+        q = parse_qs(u.query)
+        ai_backview = q.get("ai_backview", ["0"])[0] == "1"
+        extra = []
+        if q.get("hair", ["auto"])[0] in HAIR:
+            extra += ["--hair", q.get("hair", ["auto"])[0]]
+        if q.get("shoes", ["auto"])[0] in ("auto", "none", "shoes01", "shoes02", "shoes03", "shoes04", "shoes05", "shoes06"):
+            extra += ["--shoes", q.get("shoes", ["auto"])[0]]
+        if q.get("glasses", ["off"])[0] in ("off", "round", "square"):
+            extra += ["--glasses", q.get("glasses", ["off"])[0]]
+        gc = q.get("glasses_color", [""])[0]
+        if re.fullmatch(r"[0-9a-fA-F]{6}", gc):
+            extra += ["--glasses-color", ",".join(str(int(gc[i:i + 2], 16)) for i in (0, 2, 4))]
         job_id = uuid.uuid4().hex[:12]
         UPLOADS.mkdir(parents=True, exist_ok=True)
         img = UPLOADS / f"{job_id}{ext}"
         img.write_bytes(self.rfile.read(n))
         jobs[job_id] = {"status": "queued", "log": [], "outputs": []}
-        threading.Thread(target=run_job, args=(job_id, img, gender, ai_backview), daemon=True).start()
+        threading.Thread(target=run_job, args=(job_id, img, gender, ai_backview, extra), daemon=True).start()
         self._json({"id": job_id})
 
     def do_GET(self):

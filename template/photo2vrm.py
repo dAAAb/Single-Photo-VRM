@@ -31,6 +31,11 @@ def main():
     ap.add_argument("--out", help="output prefix (default build/out/<image stem>)")
     ap.add_argument("--gender", choices=list(GENDER), help="optional hint; a single silhouette cannot tell reliably")
     ap.add_argument("--blender", default=BLENDER)
+    ap.add_argument("--hair", default="auto",
+                    help="auto (from the photo), none, or a MakeHuman style: short01-04 bob01 bob02 long01 ponytail01 braid01 afro01")
+    ap.add_argument("--shoes", default="auto", help="auto (from the photo), none (barefoot) or shoes01–shoes06")
+    ap.add_argument("--glasses", default="off", help="off, round or square (frame only)")
+    ap.add_argument("--glasses-color", default="20,20,22", help="frame colour R,G,B")
     ap.add_argument("--ai-backview", action="store_true",
                     help="OPTIONAL: generate the back with FLUX.2-klein-4B via mflux (first use downloads ~15 GB)")
     args = ap.parse_args()
@@ -84,9 +89,42 @@ def main():
     tmeta = texture.bake(work, params, res)
     log(f"    from photo{' + AI back view' if tmeta['ai_backview'] else ''}: {tmeta['coverage']:.0%} of the UV atlas; rest inpainted")
 
+    log("    hair / eyebrows / eyelashes (MakeHuman CC0 proxies)")
+    from fit import hair as hairmod
+    hinfo = hairmod.analyse(work, gender_hint=GENDER.get(args.gender))
+    style = hinfo["style"] if args.hair == "auto" else args.hair
+    log(f"    hair={style} ({'auto: ' + str(hinfo['reason']) if args.hair == 'auto' else 'user choice'})")
+    hair_rgb = hinfo["hair_rgb"] or tmeta.get("hair") or [60, 45, 35]
+    brow_rgb = hinfo["brow_rgb"] or [c * 0.6 for c in hair_rgb]
+    specs = []
+    from fit.proxies import ASSETS, load as load_proxy
+    for kind, name, rgb in (("hair", style, hair_rgb), ("eyebrows", "eyebrow001", brow_rgb),
+                            ("eyelashes", "eyelashes01", [25, 20, 18])):
+        if name == "none":
+            continue
+        src = load_proxy(kind, name).texture
+        tex = hairmod.tint_texture(src, rgb, work / f"{kind}_{name}.png") if src else None
+        specs.append({"kind": kind, "name": name, "texture": str(tex) if tex else None})
+    from fit import shoes as shoesmod
+    sinfo = shoesmod.analyse(work, tmeta.get("skin"))
+    shoe = sinfo["style"] if args.shoes == "auto" else args.shoes
+    log(f"    shoes={shoe} ({'auto: ' + sinfo['reason'] if args.shoes == 'auto' else 'user choice'})")
+    if shoe != "none":
+        src = load_proxy("clothes", shoe).texture
+        tex = src
+        if args.shoes == "auto" and sinfo.get("rgb"):  # nudge the texture towards the photo's shoe colour
+            tex = hairmod.tint_texture(src, sinfo["rgb"], work / f"clothes_{shoe}.png", strength=0.6)
+        specs.append({"kind": "clothes", "name": shoe, "texture": str(tex)})
+    if args.glasses != "off":
+        specs.append({"kind": "glasses", "name": args.glasses,
+                      "color": [int(c) for c in args.glasses_color.split(",")]})
+        log(f"    glasses={args.glasses}")
+    json.dump(specs, open(work / "proxies.json", "w"), indent=1)
+
     log("5/6 T-pose export")
     npz = work / "anny_tpose.npz"
     subprocess.run([sys.executable, str(HERE / "export_anny.py"), "--params", str(work / "params.json"),
+                    "--proxies", str(work / "proxies.json"),
                     "--out", str(npz)], cwd=HERE, check=True, stdout=subprocess.DEVNULL)
 
     log("6/6 VRM build (Blender)")

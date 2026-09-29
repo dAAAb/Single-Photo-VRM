@@ -203,12 +203,21 @@ async function photoToVRM(file: File) {
   genImages.innerHTML = '';
   let res: Response;
   try {
-    const q = new URLSearchParams({ ...(gender ? { gender } : {}), ...(aiBack ? { ai_backview: '1' } : {}) });
-    res = await fetch(`/api/photo2vrm?${q}`, {
-      method: 'POST', body: file, headers: { 'X-Filename': file.name },
+    const q = new URLSearchParams({
+      ...(gender ? { gender } : {}), ...(aiBack ? { ai_backview: '1' } : {}),
+      hair: document.querySelector<HTMLSelectElement>('#gen-hair')!.value,
+      glasses: document.querySelector<HTMLSelectElement>('#gen-glasses')!.value,
+      shoes: document.querySelector<HTMLSelectElement>('#gen-shoes')!.value,
+      glasses_color: document.querySelector<HTMLInputElement>('#gen-glasses-color')!.value.slice(1),
     });
-  } catch {
-    genStatus.textContent = '連不上本機 API，請先執行 template/.venv/bin/python template/server.py';
+    res = await fetch(`/api/photo2vrm?${q}`, {
+      // Header values must be ISO-8859-1: percent-encode the name (Chinese file names used to throw here).
+      method: 'POST', body: file, headers: { 'X-Filename': encodeURIComponent(file.name) },
+    });
+  } catch (e) {
+    genStatus.textContent = e instanceof TypeError && /fetch|network/i.test(e.message)
+      ? '連不上本機 API：請先執行 template/.venv/bin/python template/server.py'
+      : `上傳失敗：${(e as Error).message}`;
     return;
   }
   if (!res.ok) { genStatus.textContent = `API 錯誤 ${res.status}（server.py 有在跑嗎？）`; return; }

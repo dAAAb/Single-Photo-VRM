@@ -76,3 +76,7 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 #gen-images img { width: 100%; border-radius: 6px; margin-top: 8px; border: 1px solid var(--line); }
 #gen-links a { margin-right: 10px; color: var(--accent); }
 section select { font: inherit; padding: 3px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+#gen-advanced { margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; }
+#gen-advanced summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+#gen-advanced[open] summary { margin-bottom: 4px; }
+#gen-log:empty { display: none; }

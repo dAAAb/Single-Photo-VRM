@@ -114,6 +114,22 @@ tags:
 - [ ] 卡通非 T-pose、卡通臉型（MediaPipe 在卡通臉上不可靠）
 - [ ] 移植到 Web（JS 版 Anny 線性模型 + 擬合）
 
+### Phase 3b — 頭髮、眉毛、睫毛、鞋子、眼鏡（不需 AI）✅
+
+> 見 [[MakeHuman Proxies]]。全部 CC0 或程式生成，免下載大模型。
+
+- [x] MakeHuman 系統素材包（CC0，約 280 MB，`template/build.sh` 會下載）：頭髮 10 款、眉毛 12、睫毛 4、鞋子 6
+- [x] `.mhclo` 綁在 hm08（= Anny `anny-full`）→ 自動跟隨擬合體型，**繼承 52 個表情**（睫毛會眨、眉毛會動），繼承蒙皮權重
+- [x] 髮型自動判斷（`fit/hair.py`）：MediaPipe 頭髮類別 → 垂到下巴下多少、臉側寬度、頭頂蓬度 → 長直髮 / 鮑伯 / 短髮 / 平頭 / 爆炸頭 / 無；綁起來（馬尾）正面看不出來 → 性別提示打破平手，使用者可覆寫
+- [x] 髮色 / 眉色取樣並重新上色貼圖；alpha cutoff（glTF MASK）
+- [x] **頭髮 spring bone**：垂到耳朵以下的頭髮依方位（後 / 左 / 右）自動生成 4 節骨鏈 + 頭 / 頸 / 胸 / 肩碰撞球；VRM1 `VRMC_springBone`、VRM0 `secondaryAnimation`；實測跑步時馬尾甩動
+- [x] 鞋子（`fit/shoes.py`）：腳部分割為皮膚 → 光腳；否則依 HSV 選款並往照片鞋色調色；`delete_verts` 隱藏鞋內腳部面
+- [x] 眼鏡（`fit/glasses.py`）：依 MediaPipe 眼角 / 眼瞼 / 鼻樑 / 臉側點程式生成鏡框（圓 / 方），綁頭骨；需手動開啟（無可靠自動偵測）
+- [x] 貼圖修正：後腦填髮色僅限耳上頭皮（修正脖子咖啡色）；輪廓邊緣內縮 + 斜視角捨棄（修正白邊）；手只取皮膚像素、否則填膚色；軀幹背面不帶入照片中的手
+- [x] 介面：生成頁籤只留「選擇照片」，性別 / 髮型 / 鞋子 / 眼鏡 / AI 背面收進「進階設定」
+- [ ] 眼鏡自動偵測、帽子（目前戴帽會判成無髮）、服裝層（寬鬆衣物）
+- [ ] 材質改 MToon（照片貼圖已含光影；PBR 在部分 app 顯得偏暗）
+
 ### Phase 2b — Web 臉型擬合（移植）
 - [ ] 一次性標註 MediaPipe 478 點 ↔ ICT 頂點對應（ICT 只附 68 點索引）
 - [ ] JS Levenberg-Marquardt：ICT identity + 頭部姿態，加 PCA 先驗做正則化；用 facial transformation matrix 當初始值
